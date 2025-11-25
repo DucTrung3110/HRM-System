@@ -82,40 +82,44 @@ Frontend chạy trên: **http://localhost:5173**
 ## 📖 Cấu Trúc Dự Án
 
 ```
-├── client/                    # Vue.js Frontend
+├── frontend/                  # Vue.js Frontend Application
 │   ├── public/                # Static assets
 │   ├── src/
-│   │   ├── components/        # Vue components
-│   │   ├── views/             # Trang chính (Dashboard, Employees, v.v.)
+│   │   ├── assets/            # CSS, Images, Fonts
+│   │   ├── components/        # Reusable Vue components
+│   │   ├── views/             # Page components (Dashboard, Employees, etc.)
 │   │   ├── router/            # Vue Router config
-│   │   ├── services/          # API services (Axios)
-│   │   ├── stores/            # Pinia stores
-│   │   ├── types/             # Type definitions
-│   │   ├── App.vue
-│   │   ├── main.js
-│   │   └── index.css
-│   └── index.html
-├── server/                    # Express.js Backend
-│   ├── index.js               # Server entry point
-│   ├── routes.js              # API routes
-│   ├── storage.js             # Database config
-│   └── vite.js                # Vite dev server config
-├── shared/                    # Shared code
-│   └── schema.js              # Database schema (Drizzle)
-├── figma-exports/             # Static HTML/CSS exports (15 pages)
-│   ├── 01-Login/
-│   ├── 02-Dashboard/
-│   ├── 03-Employees/
-│   ├── 04-Departments/
-│   ├── ... (15 pages total)
-│   └── 15-EmployeePortal/
-├── attached_assets/           # Generated images/assets
-├── vite.config.js             # Vite config
-├── tailwind.config.js         # Tailwind CSS config
-├── drizzle.config.js          # Drizzle ORM config
-├── package.json               # Dependencies
-├── replit.md                  # Project documentation
-└── .replit                    # Replit configuration
+│   │   ├── services/          # API service calls (Axios)
+│   │   ├── stores/            # State Management (Pinia)
+│   │   ├── utils/             # Helper functions
+│   │   ├── App.vue            # Root component
+│   │   └── main.js            # Entry point
+│   ├── index.html
+│   ├── tailwind.config.js     # Tailwind CSS config
+│   ├── vite.config.js         # Vite config
+│   └── package.json           # Frontend dependencies
+│
+├── backend/                   # Laravel Backend Application
+│   ├── app/
+│   │   ├── Http/
+│   │   │   ├── Controllers/   # API Controllers
+│   │   │   ├── Middleware/    # Auth & Role Middleware
+│   │   │   └── Requests/      # Validation Logic
+│   │   └── Models/            # Eloquent Models
+│   ├── config/                # App configuration files
+│   ├── database/
+│   │   ├── migrations/        # Database schema definitions
+│   │   └── seeders/           # Fake data generators
+│   ├── routes/
+│   │   ├── api.php            # API Endpoints
+│   │   └── web.php
+│   ├── storage/               # Logs, Uploaded files
+│   ├── .env.example           # Environment template
+│   ├── artisan                # Laravel CLI
+│   ├── composer.json          # Backend dependencies
+│   └── phpunit.xml            # Testing config
+│
+└── README.md                  # Project documentation
 ```
 
 ## 🔐 Bảo Mật
