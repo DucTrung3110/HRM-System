@@ -95,7 +95,7 @@
           </div>
         </template>
         
-        <template #cell-attendance_date="{ value }">
+        <template #cell-record_date="{ value }">
           <span class="text-sm">{{ formatDate(value) }}</span>
         </template>
         
@@ -191,7 +191,7 @@
           </div>
           <div>
             <p class="text-sm text-muted-foreground">Ngày</p>
-            <p class="font-medium">{{ formatDate(editingRecord.attendance_date) }}</p>
+            <p class="font-medium">{{ formatDate(editingRecord.record_date) }}</p>
           </div>
         </div>
         <BaseSelect
@@ -283,7 +283,7 @@ const editForm = ref({
 
 const columns = [
   { key: 'employee', label: 'Nhân viên' },
-  { key: 'attendance_date', label: 'Ngày' },
+  { key: 'record_date', label: 'Ngày' },
   { key: 'check_in_time', label: 'Giờ vào' },
   { key: 'check_out_time', label: 'Giờ ra' },
   { key: 'total_work_hours', label: 'Tổng giờ' },
@@ -402,7 +402,7 @@ const handleCheckOut = async (record) => {
   
   try {
     processing.value = true;
-    await attendanceService.checkOut(record.employee_id);
+    await attendanceService.checkOut(record.id, record.status || 'present');
     await loadData();
   } catch (err) {
     console.error('Error checking out:', err);
@@ -456,8 +456,7 @@ const loadData = async () => {
     
     const today = new Date().toISOString().split('T')[0];
     const todayRecords = records.value.filter(r => {
-      const recordDate = r.attendance_date || r.record_date;
-      return recordDate === today;
+      return r.record_date === today;
     });
     
     todaySummary.value = {
