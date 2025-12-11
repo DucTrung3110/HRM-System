@@ -99,7 +99,10 @@
                   <p class="text-xs text-muted-foreground">{{ emp.job_title || '' }}</p>
                 </div>
               </div>
-              <div v-if="!selectedDept.employees?.length" class="text-center py-8 text-muted-foreground">
+              <div v-if="loadingEmployees" class="text-center py-4 text-muted-foreground">
+                Đang tải...
+              </div>
+              <div v-else-if="!selectedDept.employees?.length" class="text-center py-8 text-muted-foreground">
                 Chưa có nhân viên
               </div>
             </div>
@@ -185,6 +188,7 @@ import BaseBadge from '../components/BaseBadge.vue';
 import BaseModal from '../components/BaseModal.vue';
 import IconBuilding from '../components/IconBuilding.vue';
 import { departmentService } from '../services/departmentService';
+import { employeeService } from '../services/employeeService';
 
 const loading = ref(true);
 const error = ref('');
@@ -199,7 +203,9 @@ const editingId = ref(null);
 const deleteTarget = ref(null);
 
 const departments = ref([]);
+const allEmployees = ref([]);
 const selectedDept = ref(null);
+const loadingEmployees = ref(false);
 
 const form = ref({
   code: '',
@@ -271,8 +277,30 @@ const closeModal = () => {
   resetForm();
 };
 
-const selectDepartment = (dept) => {
-  selectedDept.value = dept;
+const selectDepartment = async (dept) => {
+  selectedDept.value = { ...dept, employees: [] };
+  loadingEmployees.value = true;
+  
+  try {
+    const targetDeptId = Number(dept.id);
+    
+    const deptEmployees = allEmployees.value.filter(emp => {
+      const empDeptId = Number(emp.department_id || emp.employment?.department_id || 0);
+      return empDeptId === targetDeptId && empDeptId !== 0;
+    });
+    
+    selectedDept.value = { 
+      ...dept, 
+      employees: deptEmployees.map(emp => ({
+        ...emp,
+        job_title: emp.job_title || emp.employment?.job_title?.name || ''
+      }))
+    };
+  } catch (err) {
+    console.error('Error loading department employees:', err);
+  } finally {
+    loadingEmployees.value = false;
+  }
 };
 
 const handleSubmit = async () => {
@@ -357,7 +385,14 @@ onMounted(async () => {
   try {
     loading.value = true;
     error.value = '';
-    await loadDepartments();
+    
+    const [deptsRes, empsRes] = await Promise.all([
+      departmentService.getAll(),
+      employeeService.getAll()
+    ]);
+    
+    departments.value = deptsRes?.data || deptsRes || [];
+    allEmployees.value = empsRes?.data || empsRes || [];
   } catch (err) {
     console.error('Departments API Error:', err);
     error.value = err.response?.data?.error || err.message || 'Không thể kết nối đến API';

@@ -74,20 +74,24 @@
             </div>
           </template>
 
+          <template #cell-email="{ item }">
+            <span class="text-sm">{{ item.personal_email || item.email || '-' }}</span>
+          </template>
+
           <template #cell-department="{ item }">
-            <span class="text-sm">{{ item.department_name || '-' }}</span>
+            <span class="text-sm">{{ item.department || item.department_name || '-' }}</span>
           </template>
 
           <template #cell-job_title="{ item }">
-            <span class="text-sm">{{ item.job_title_name || '-' }}</span>
+            <span class="text-sm">{{ item.job_title || item.job_title_name || '-' }}</span>
           </template>
 
           <template #cell-status="{ item }">
             <BaseBadge
-              :variant="getStatusVariant(item.is_active)"
+              :variant="getStatusVariant(item.employment_status)"
               data-testid="badge-employee-status"
             >
-              {{ item.is_active ? 'Đang làm việc' : 'Nghỉ việc' }}
+              {{ getStatusLabel(item.employment_status) }}
             </BaseBadge>
           </template>
 
@@ -312,8 +316,7 @@ const filteredEmployees = computed(() => {
   }
   
   if (filters.value.status) {
-    const isActive = filters.value.status === 'active';
-    result = result.filter(emp => emp.is_active === isActive);
+    result = result.filter(emp => emp.employment_status === filters.value.status);
   }
   
   return result;
@@ -329,8 +332,21 @@ const getInitials = (name) => {
     .slice(0, 2);
 };
 
-const getStatusVariant = (isActive) => {
-  return isActive ? 'success' : 'default';
+const getStatusVariant = (status) => {
+  if (status === 'active' || status === true) return 'success';
+  if (status === 'probation') return 'warning';
+  return 'default';
+};
+
+const getStatusLabel = (status) => {
+  const labels = {
+    'active': 'Đang làm việc',
+    'probation': 'Thử việc',
+    'inactive': 'Nghỉ việc',
+    'terminated': 'Đã nghỉ',
+    'resigned': 'Đã nghỉ'
+  };
+  return labels[status] || (status ? 'Đang làm việc' : 'Nghỉ việc');
 };
 
 const resetForm = () => {
