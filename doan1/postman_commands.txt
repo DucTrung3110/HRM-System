@@ -1,0 +1,198 @@
+# HRM API Postman Commands (with required headers)
+
+Base
+- baseUrl: http://localhost:8000
+- Default headers: Content-Type: application/json
+- Auth header: Authorization: Bearer {{TOKEN}}
+
+Auth
+- POST {{baseUrl}}/api/login
+  Headers: Content-Type
+  Body: {"email":"admin.nguyen@congty.vn","password":"hashed_password_1"}
+  -> Set response token to {{TOKEN}}
+
+Health
+- GET  {{baseUrl}}/api/health
+- POST {{baseUrl}}/api/health
+
+Roles & Users (perm: P002 for roles, P001+P002 for user CRUD)
+- GET  {{baseUrl}}/api/roles
+  Headers: Content-Type, Authorization
+- GET  {{baseUrl}}/api/users
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/users
+  Headers: Content-Type, Authorization
+  Body: {"name":"Test User","email":"test@example.com","password":"Abc@12345","role_ids":[1]}
+- PATCH {{baseUrl}}/api/users/1
+  Headers: Content-Type, Authorization
+  Body: {"name":"User Updated","password":"NewPass@123","role_ids":[1]}
+- DELETE {{baseUrl}}/api/users/1
+  Headers: Content-Type, Authorization
+
+Departments (perm: P003 view, P004 edit)
+- GET  {{baseUrl}}/api/departments
+  Headers: Content-Type, Authorization
+- GET  {{baseUrl}}/api/departments/1
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/departments
+  Headers: Content-Type, Authorization
+  Body: {"code":"DEP99","name":"Phong Test","manager_id":1,"parent_id":1,"is_active":1}
+- PATCH {{baseUrl}}/api/departments/1
+  Headers: Content-Type, Authorization
+  Body: {"name":"Phong Test Updated","is_active":1}
+- DELETE {{baseUrl}}/api/departments/1
+  Headers: Content-Type, Authorization
+
+Job Families (perm: P003/P004)
+- GET  {{baseUrl}}/api/job-families
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/job-families
+  Headers: Content-Type, Authorization
+  Body: {"code":"JF99","name":"Nhom Test","description":"demo","is_active":1}
+- PATCH {{baseUrl}}/api/job-families/1
+  Headers: Content-Type, Authorization
+  Body: {"name":"Nhom Test Updated","is_active":1}
+- DELETE {{baseUrl}}/api/job-families/1
+  Headers: Content-Type, Authorization
+
+Job Titles (perm: P003/P004)
+- GET  {{baseUrl}}/api/job-titles
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/job-titles
+  Headers: Content-Type, Authorization
+  Body: {"code":"JT99","name":"Chuc danh Test","job_level":"senior","job_family_id":1,"is_active":1}
+- PATCH {{baseUrl}}/api/job-titles/1
+  Headers: Content-Type, Authorization
+  Body: {"name":"Chuc danh Updated","job_level":"lead","job_family_id":1}
+- DELETE {{baseUrl}}/api/job-titles/1
+  Headers: Content-Type, Authorization
+
+Employees (perm: P003 view, P004 edit; respect unique user_id)
+- GET  {{baseUrl}}/api/employees
+  Headers: Content-Type, Authorization
+- GET  {{baseUrl}}/api/employees/1
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/employees
+  Headers: Content-Type, Authorization
+  Body:
+  {
+    "code":"EMP9999",
+    "user_id":null,
+    "full_name":"Nguyen Test",
+    "gender":"M",
+    "dob":"1990-01-01",
+    "personal_email":"test@ex.com",
+    "personal_phone":"0909000999",
+    "employment":{
+      "department_id":1,
+      "job_title_id":1,
+      "start_date":"2025-01-01",
+      "salary":15000000,
+      "work_location":"head_office",
+      "employment_type":"full_time",
+      "employment_status":"active",
+    "report_to":1
+    }
+  }
+  Note: dùng user_id null hoặc user chưa có employee để tránh lỗi unique.
+- PATCH {{baseUrl}}/api/employees/1
+  Headers: Content-Type, Authorization
+  Body: {"full_name":"Nguyen Test Updated","personal_phone":"0909000000"}
+- DELETE {{baseUrl}}/api/employees/1
+  Headers: Content-Type, Authorization
+
+Employment Histories (perm: P003/P004)
+- GET  {{baseUrl}}/api/employees/1/histories
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/employees/1/histories
+  Headers: Content-Type, Authorization
+  Body:
+  {
+    "department_id":1,
+    "job_title_id":1,
+    "start_date":"2025-02-01",
+    "salary":16000000,
+    "work_location":"head_office",
+    "employment_type":"full_time",
+    "employment_status":"active",
+    "report_to":1
+  }
+
+Leave (perm: P006 view/create, P005 approve)
+- GET  {{baseUrl}}/api/leave-types
+  Headers: Content-Type, Authorization
+- GET  {{baseUrl}}/api/leave-balances/1
+  Headers: Content-Type, Authorization
+- GET  {{baseUrl}}/api/leave-requests?status=pending&employee_id=1
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/leave-requests
+  Headers: Content-Type, Authorization
+  Body: {"employee_id":1,"leave_type_id":1,"start_date":"2025-03-01","end_date":"2025-03-02","reason":"Viec rieng"}
+- PATCH {{baseUrl}}/api/leave-requests/1
+  Headers: Content-Type, Authorization
+  Body: {"status":"approved","approved_by":1,"approved_at":"2025-02-01 09:00:00"}
+
+Work Shifts (perm: P012)
+- GET  {{baseUrl}}/api/work-shifts
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/work-shifts
+  Headers: Content-Type, Authorization
+  Body: {"code":"SHTEST","name":"Ca Test","start_time":"08:00:00","end_time":"17:00:00","break_minutes":60,"total_hours":8,"is_default":0,"is_active":1}
+- PATCH {{baseUrl}}/api/work-shifts/1
+  Headers: Content-Type, Authorization
+  Body: {"name":"Ca Test Updated","is_default":1}
+- DELETE {{baseUrl}}/api/work-shifts/1
+  Headers: Content-Type, Authorization
+
+Work Schedules (perm: P009,P012 view; P012 edit)
+- GET  {{baseUrl}}/api/work-schedules?employee_id=1&from=2025-03-01&to=2025-03-07
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/work-schedules
+  Headers: Content-Type, Authorization
+  Body: {"employee_id":1,"work_date":"2025-03-02","shift_id":1,"status":"scheduled"}
+- PATCH {{baseUrl}}/api/work-schedules/1
+  Headers: Content-Type, Authorization
+  Body: {"actual_start_time":"2025-03-02 08:05:00","actual_end_time":"2025-03-02 17:05:00","total_hours":8,"overtime_hours":1,"status":"present"}
+- DELETE {{baseUrl}}/api/work-schedules/1
+  Headers: Content-Type, Authorization
+
+Attendance (perm: P009 view/checkin/out, P010 update)
+- GET  {{baseUrl}}/api/attendance?employee_id=1&from=2025-03-01&to=2025-03-07
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/attendance/checkin
+  Headers: Content-Type, Authorization
+  Body: {"employee_id":1,"status":"present"}
+- POST {{baseUrl}}/api/attendance/checkout
+  Headers: Content-Type, Authorization
+  Body: {"id":1,"status":"present"}
+- PATCH {{baseUrl}}/api/attendance/1
+  Headers: Content-Type, Authorization
+  Body: {"record_date":"2025-03-01","check_in_time":"2025-03-01 08:05:00","check_out_time":"2025-03-01 17:10:00","total_work_hours":8,"late_minutes":5,"early_leave_minutes":0,"overtime_hours":0.5,"status":"present"}
+
+Salary Components (perm: P007 view, P008 edit)
+- GET  {{baseUrl}}/api/salary-components
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/salary-components
+  Headers: Content-Type, Authorization
+  Body: {"code":"SC99","name":"Phu cap Test","type":"earning","category":"allowance","is_taxable":1,"is_active":1}
+- PATCH {{baseUrl}}/api/salary-components/1
+  Headers: Content-Type, Authorization
+  Body: {"name":"Phu cap Updated","is_taxable":0}
+- DELETE {{baseUrl}}/api/salary-components/1
+  Headers: Content-Type, Authorization
+
+Employee Salaries (perm: P007 view, P008 edit)
+- GET  {{baseUrl}}/api/employees/1/salaries
+  Headers: Content-Type, Authorization
+- POST {{baseUrl}}/api/employees/1/salaries
+  Headers: Content-Type, Authorization
+  Body: {"salary_component_id":1,"amount":20000000,"effective_date":"2025-04-01","end_date":null}
+- PATCH {{baseUrl}}/api/employees/1/salaries/1
+  Headers: Content-Type, Authorization
+  Body: {"amount":21000000,"end_date":"2025-12-31"}
+- DELETE {{baseUrl}}/api/employees/1/salaries/1
+  Headers: Content-Type, Authorization
+
+Activity Logs (perm: P011)
+- GET {{baseUrl}}/api/activity-logs?by_user_id=1&action=create
+  Headers: Content-Type, Authorization

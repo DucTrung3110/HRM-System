@@ -1,0 +1,8 @@
+Options -Indexes
+RewriteEngine On
+
+# Nếu URL chưa bắt đầu bằng /public, chuyển hướng vào public để dùng tiếp rules bên trong.
+RewriteCond %{REQUEST_URI} !^/public/
+RewriteRule ^(.*)$ public/$1 [L]
+
+# Các rule còn lại sẽ được xử lý bởi public/.htaccess (fallback về public/index.php).
