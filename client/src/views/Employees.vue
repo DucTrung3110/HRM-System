@@ -38,7 +38,7 @@
           />
           <BaseSelect
             v-model="filters.status"
-            :options="statusOptions"
+            :options="statusFilterOptions"
             placeholder="Tất cả trạng thái"
             data-testid="select-status-filter"
           />
@@ -51,6 +51,53 @@
           </BaseButton>
         </div>
       </BaseCard>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+        <BaseCard class="p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <IconUser class="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p class="text-2xl font-bold">{{ totalEmployees }}</p>
+              <p class="text-sm text-muted-foreground">Tổng nhân viên</p>
+            </div>
+          </div>
+        </BaseCard>
+        <BaseCard class="p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+              <IconUser class="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-green-600">{{ activeEmployees }}</p>
+              <p class="text-sm text-muted-foreground">Đang làm việc</p>
+            </div>
+          </div>
+        </BaseCard>
+        <BaseCard class="p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
+              <IconUser class="w-5 h-5 text-yellow-600" />
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-yellow-600">{{ probationEmployees }}</p>
+              <p class="text-sm text-muted-foreground">Thử việc</p>
+            </div>
+          </div>
+        </BaseCard>
+        <BaseCard class="p-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+              <IconUser class="w-5 h-5 text-gray-600" />
+            </div>
+            <div>
+              <p class="text-2xl font-bold text-gray-600">{{ inactiveEmployees }}</p>
+              <p class="text-sm text-muted-foreground">Nghỉ việc</p>
+            </div>
+          </div>
+        </BaseCard>
+      </div>
 
       <BaseCard>
         <div v-if="filteredEmployees.length === 0" class="text-center py-8 text-muted-foreground">
@@ -117,12 +164,13 @@
                 </svg>
               </button>
               <button
-                @click="confirmDelete(item)"
-                class="p-1 rounded hover:bg-muted text-destructive"
-                title="Xóa"
+                @click="openStatusModal(item)"
+                class="p-1 rounded hover:bg-muted"
+                :class="item.employment_status === 'active' ? 'text-yellow-600' : 'text-green-600'"
+                :title="item.employment_status === 'active' ? 'Đổi sang nghỉ việc' : 'Đổi sang đang làm việc'"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                 </svg>
               </button>
             </div>
@@ -188,12 +236,30 @@
           label="Ngày vào làm" 
           type="date" 
         />
+        <BaseSelect 
+          v-model="form.employment_status" 
+          label="Trạng thái làm việc" 
+          :options="employmentStatusOptions" 
+        />
+        <BaseSelect 
+          v-model="form.employment_type" 
+          label="Loại hình làm việc" 
+          :options="employmentTypeOptions" 
+        />
         <div class="md:col-span-2">
           <BaseInput 
             v-model="form.address" 
             label="Địa chỉ" 
           />
         </div>
+        <BaseInput 
+          v-model="form.bank_name" 
+          label="Ngân hàng" 
+        />
+        <BaseInput 
+          v-model="form.bank_account" 
+          label="Số tài khoản" 
+        />
       </div>
 
       <div v-if="formError" class="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
@@ -209,19 +275,42 @@
     </BaseModal>
 
     <BaseModal
-      v-model="showDeleteModal"
-      title="Xác nhận xóa"
+      v-model="showStatusModal"
+      title="Thay đổi trạng thái làm việc"
       size="sm"
     >
-      <p class="text-muted-foreground">
-        Bạn có chắc chắn muốn xóa nhân viên <strong>{{ deleteTarget?.full_name }}</strong>?
-      </p>
-      <p class="text-sm text-destructive mt-2">Hành động này không thể hoàn tác.</p>
+      <div class="space-y-4">
+        <p class="text-muted-foreground">
+          Nhân viên: <strong>{{ statusTarget?.full_name }}</strong>
+        </p>
+        <p class="text-muted-foreground">
+          Trạng thái hiện tại: 
+          <BaseBadge :variant="getStatusVariant(statusTarget?.employment_status)">
+            {{ getStatusLabel(statusTarget?.employment_status) }}
+          </BaseBadge>
+        </p>
+        <BaseSelect 
+          v-model="newStatus" 
+          label="Trạng thái mới" 
+          :options="employmentStatusOptions" 
+        />
+        <BaseInput 
+          v-if="newStatus === 'inactive' || newStatus === 'resigned' || newStatus === 'terminated'"
+          v-model="terminationDate" 
+          label="Ngày nghỉ việc" 
+          type="date" 
+        />
+        <BaseInput 
+          v-if="newStatus === 'inactive' || newStatus === 'resigned' || newStatus === 'terminated'"
+          v-model="terminationReason" 
+          label="Lý do nghỉ việc" 
+        />
+      </div>
 
       <template #footer>
-        <BaseButton variant="outline" @click="showDeleteModal = false" :disabled="deleting">Hủy</BaseButton>
-        <BaseButton variant="destructive" @click="handleDelete" :disabled="deleting">
-          {{ deleting ? 'Đang xóa...' : 'Xóa' }}
+        <BaseButton variant="outline" @click="showStatusModal = false" :disabled="updatingStatus">Hủy</BaseButton>
+        <BaseButton @click="handleStatusChange" :disabled="updatingStatus">
+          {{ updatingStatus ? 'Đang cập nhật...' : 'Cập nhật trạng thái' }}
         </BaseButton>
       </template>
     </BaseModal>
@@ -238,6 +327,7 @@ import BaseSelect from '../components/BaseSelect.vue';
 import BaseBadge from '../components/BaseBadge.vue';
 import BaseTable from '../components/BaseTable.vue';
 import BaseModal from '../components/BaseModal.vue';
+import IconUser from '../components/IconUser.vue';
 import { employeeService } from '../services/employeeService';
 import { departmentService } from '../services/departmentService';
 import { jobTitleService } from '../services/jobTitleService';
@@ -247,14 +337,17 @@ const router = useRouter();
 const loading = ref(true);
 const error = ref('');
 const saving = ref(false);
-const deleting = ref(false);
+const updatingStatus = ref(false);
 const formError = ref('');
 
 const showModal = ref(false);
-const showDeleteModal = ref(false);
+const showStatusModal = ref(false);
 const isEditing = ref(false);
 const editingId = ref(null);
-const deleteTarget = ref(null);
+const statusTarget = ref(null);
+const newStatus = ref('');
+const terminationDate = ref('');
+const terminationReason = ref('');
 
 const employees = ref([]);
 const departmentOptions = ref([]);
@@ -277,7 +370,11 @@ const form = ref({
   address: '',
   department_id: '',
   job_title_id: '',
-  hire_date: ''
+  hire_date: '',
+  employment_status: 'active',
+  employment_type: 'fulltime',
+  bank_name: '',
+  bank_account: ''
 });
 
 const columns = [
@@ -288,9 +385,26 @@ const columns = [
   { key: 'status', label: 'Trạng thái' },
 ];
 
-const statusOptions = [
+const statusFilterOptions = [
   { label: 'Đang làm việc', value: 'active' },
+  { label: 'Thử việc', value: 'probation' },
   { label: 'Nghỉ việc', value: 'inactive' },
+  { label: 'Đã nghỉ', value: 'resigned' },
+];
+
+const employmentStatusOptions = [
+  { label: 'Đang làm việc', value: 'active' },
+  { label: 'Thử việc', value: 'probation' },
+  { label: 'Nghỉ việc', value: 'inactive' },
+  { label: 'Đã nghỉ', value: 'resigned' },
+  { label: 'Chấm dứt HĐ', value: 'terminated' },
+];
+
+const employmentTypeOptions = [
+  { label: 'Toàn thời gian', value: 'fulltime' },
+  { label: 'Bán thời gian', value: 'parttime' },
+  { label: 'Hợp đồng', value: 'contract' },
+  { label: 'Thực tập', value: 'intern' },
 ];
 
 const genderOptions = [
@@ -298,6 +412,22 @@ const genderOptions = [
   { label: 'Nữ', value: 'female' },
   { label: 'Khác', value: 'other' },
 ];
+
+const totalEmployees = computed(() => employees.value.length);
+const activeEmployees = computed(() => 
+  employees.value.filter(e => e.employment_status === 'active' || e.is_active === true).length
+);
+const probationEmployees = computed(() => 
+  employees.value.filter(e => e.employment_status === 'probation').length
+);
+const inactiveEmployees = computed(() => 
+  employees.value.filter(e => 
+    e.employment_status === 'inactive' || 
+    e.employment_status === 'resigned' || 
+    e.employment_status === 'terminated' ||
+    e.is_active === false
+  ).length
+);
 
 const filteredEmployees = computed(() => {
   let result = [...employees.value];
@@ -335,6 +465,7 @@ const getInitials = (name) => {
 const getStatusVariant = (status) => {
   if (status === 'active' || status === true) return 'success';
   if (status === 'probation') return 'warning';
+  if (status === 'inactive' || status === 'resigned' || status === 'terminated') return 'default';
   return 'default';
 };
 
@@ -343,7 +474,7 @@ const getStatusLabel = (status) => {
     'active': 'Đang làm việc',
     'probation': 'Thử việc',
     'inactive': 'Nghỉ việc',
-    'terminated': 'Đã nghỉ',
+    'terminated': 'Chấm dứt HĐ',
     'resigned': 'Đã nghỉ'
   };
   return labels[status] || (status ? 'Đang làm việc' : 'Nghỉ việc');
@@ -361,7 +492,11 @@ const resetForm = () => {
     address: '',
     department_id: '',
     job_title_id: '',
-    hire_date: ''
+    hire_date: '',
+    employment_status: 'active',
+    employment_type: 'fulltime',
+    bank_name: '',
+    bank_account: ''
   };
   formError.value = '';
 };
@@ -378,21 +513,49 @@ const openEditModal = (employee) => {
   isEditing.value = true;
   editingId.value = employee.id;
   
+  // Try to find department_id by matching name if ID not provided
+  let deptId = employee.department_id ? String(employee.department_id) : '';
+  if (!deptId && (employee.department || employee.department_name)) {
+    const deptName = employee.department || employee.department_name;
+    const matchedDept = departmentOptions.value.find(d => d.label === deptName);
+    if (matchedDept) deptId = matchedDept.value;
+  }
+  
+  // Try to find job_title_id by matching name if ID not provided
+  let jobId = employee.job_title_id ? String(employee.job_title_id) : '';
+  if (!jobId && (employee.job_title || employee.job_title_name)) {
+    const jobName = employee.job_title || employee.job_title_name;
+    const matchedJob = jobTitleOptions.value.find(j => j.label === jobName);
+    if (matchedJob) jobId = matchedJob.value;
+  }
+  
   form.value = {
-    employee_code: employee.employee_code || '',
+    employee_code: employee.employee_code || employee.code || '',
     full_name: employee.full_name || '',
     email: employee.email || '',
     personal_email: employee.personal_email || '',
-    phone: employee.phone || '',
-    date_of_birth: employee.date_of_birth || '',
+    phone: employee.phone || employee.personal_phone || '',
+    date_of_birth: employee.date_of_birth || employee.dob || '',
     gender: employee.gender || '',
     address: employee.address || '',
-    department_id: employee.department_id ? String(employee.department_id) : '',
-    job_title_id: employee.job_title_id ? String(employee.job_title_id) : '',
-    hire_date: employee.hire_date || ''
+    department_id: deptId,
+    job_title_id: jobId,
+    hire_date: employee.hire_date || employee.start_date || '',
+    employment_status: employee.employment_status || 'active',
+    employment_type: employee.employment_type || 'fulltime',
+    bank_name: employee.bank_name || '',
+    bank_account: employee.bank_account || ''
   };
   
   showModal.value = true;
+};
+
+const openStatusModal = (employee) => {
+  statusTarget.value = employee;
+  newStatus.value = employee.employment_status || 'active';
+  terminationDate.value = '';
+  terminationReason.value = '';
+  showStatusModal.value = true;
 };
 
 const closeModal = () => {
@@ -426,8 +589,10 @@ const handleSubmit = async () => {
       department_id: form.value.department_id ? parseInt(form.value.department_id) : null,
       job_title_id: form.value.job_title_id ? parseInt(form.value.job_title_id) : null,
       start_date: form.value.hire_date || null,
-      employment_status: 'active',
-      employment_type: 'fulltime'
+      employment_status: form.value.employment_status,
+      employment_type: form.value.employment_type,
+      bank_name: form.value.bank_name || null,
+      bank_account: form.value.bank_account || null
     };
 
     if (isEditing.value) {
@@ -446,25 +611,52 @@ const handleSubmit = async () => {
   }
 };
 
-const confirmDelete = (employee) => {
-  deleteTarget.value = employee;
-  showDeleteModal.value = true;
-};
-
-const handleDelete = async () => {
-  if (!deleteTarget.value) return;
+const handleStatusChange = async () => {
+  if (!statusTarget.value || !newStatus.value) return;
   
   try {
-    deleting.value = true;
-    await employeeService.delete(deleteTarget.value.id);
-    showDeleteModal.value = false;
-    deleteTarget.value = null;
+    updatingStatus.value = true;
+    
+    // Find current department_id and job_title_id by name matching
+    let deptId = statusTarget.value.department_id;
+    if (!deptId && (statusTarget.value.department || statusTarget.value.department_name)) {
+      const deptName = statusTarget.value.department || statusTarget.value.department_name;
+      const matchedDept = departmentOptions.value.find(d => d.label === deptName);
+      if (matchedDept) deptId = parseInt(matchedDept.value);
+    }
+    
+    let jobId = statusTarget.value.job_title_id;
+    if (!jobId && (statusTarget.value.job_title || statusTarget.value.job_title_name)) {
+      const jobName = statusTarget.value.job_title || statusTarget.value.job_title_name;
+      const matchedJob = jobTitleOptions.value.find(j => j.label === jobName);
+      if (matchedJob) jobId = parseInt(matchedJob.value);
+    }
+    
+    // Always use today's date for new employment history so it becomes the latest record
+    const payload = {
+      employment_status: newStatus.value,
+      department_id: deptId || null,
+      job_title_id: jobId || null,
+      start_date: new Date().toISOString().split('T')[0]
+    };
+    
+    if (terminationDate.value) {
+      payload.end_date = terminationDate.value;
+    }
+    
+    await employeeService.update(statusTarget.value.id, payload);
+    const index = employees.value.findIndex(e => e.id === statusTarget.value.id);
+    if (index !== -1) {
+      employees.value[index] = { ...employees.value[index], employment_status: newStatus.value };
+    }
+    showStatusModal.value = false;
+    statusTarget.value = null;
     await loadEmployees();
   } catch (err) {
-    console.error('Error deleting employee:', err);
-    alert(err.response?.data?.error || 'Có lỗi xảy ra khi xóa');
+    console.error('Error updating status:', err);
+    alert(err.response?.data?.error || 'Có lỗi xảy ra khi cập nhật trạng thái');
   } finally {
-    deleting.value = false;
+    updatingStatus.value = false;
   }
 };
 
@@ -473,7 +665,6 @@ const viewEmployee = (employee) => {
 };
 
 const applyFilters = () => {
-  // Filters are applied reactively via computed property
 };
 
 const loadEmployees = async () => {

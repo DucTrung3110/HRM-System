@@ -40,10 +40,10 @@
               <IconBuilding class="w-5 h-5" />
               <div class="flex-1">
                 <p class="font-medium text-sm">{{ dept.name }}</p>
-                <p class="text-xs text-muted-foreground">{{ dept.code }}</p>
+                <p class="text-xs text-muted-foreground">{{ dept.code }} - {{ getDeptEmployeeCount(dept.id) }} nhân viên</p>
               </div>
-              <BaseBadge size="sm" :variant="dept.is_active ? 'success' : 'default'">
-                {{ dept.is_active ? 'Hoạt động' : 'Tạm dừng' }}
+              <BaseBadge size="sm" :variant="dept.is_active !== false ? 'success' : 'default'">
+                {{ dept.is_active !== false ? 'Hoạt động' : 'Tạm dừng' }}
               </BaseBadge>
             </div>
           </div>
@@ -64,46 +64,84 @@
               </div>
               <div>
                 <p class="text-sm text-muted-foreground">Trạng thái</p>
-                <BaseBadge :variant="selectedDept.is_active ? 'success' : 'default'">
-                  {{ selectedDept.is_active ? 'Hoạt động' : 'Tạm dừng' }}
+                <BaseBadge :variant="selectedDept.is_active !== false ? 'success' : 'default'">
+                  {{ selectedDept.is_active !== false ? 'Hoạt động' : 'Tạm dừng' }}
                 </BaseBadge>
               </div>
               <div>
                 <p class="text-sm text-muted-foreground">Phòng ban cha</p>
                 <p class="font-medium">{{ getParentName(selectedDept.parent_id) }}</p>
               </div>
+              <div>
+                <p class="text-sm text-muted-foreground">Tổng nhân viên</p>
+                <p class="font-medium text-primary">{{ getDeptEmployeeCount(selectedDept.id) }} người</p>
+              </div>
             </div>
             <div class="flex gap-2">
               <BaseButton variant="outline" size="sm" @click="openEditModal(selectedDept)">
                 Sửa
               </BaseButton>
-              <BaseButton variant="destructive" size="sm" @click="confirmDelete(selectedDept)">
-                Xóa
+              <BaseButton 
+                :variant="selectedDept.is_active !== false ? 'outline' : 'default'" 
+                size="sm" 
+                @click="toggleDepartmentStatus(selectedDept)"
+                :disabled="togglingStatus"
+              >
+                {{ selectedDept.is_active !== false ? 'Tạm dừng' : 'Kích hoạt' }}
               </BaseButton>
             </div>
           </div>
 
           <div class="border-t border-border pt-4">
-            <h3 class="font-semibold mb-3">Nhân viên trong phòng ban</h3>
-            <div class="space-y-2">
-              <div
-                v-for="emp in selectedDept.employees || []"
-                :key="emp.id"
-                class="flex items-center gap-3 p-2 rounded-lg hover:bg-muted"
-              >
-                <div class="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
-                  {{ getInitials(emp.full_name) }}
+            <h3 class="font-semibold mb-4">Nhân viên theo chức danh</h3>
+            
+            <div v-if="loadingEmployees" class="text-center py-4 text-muted-foreground">
+              Đang tải...
+            </div>
+            
+            <div v-else-if="groupedEmployees.length === 0" class="text-center py-8 text-muted-foreground">
+              Chưa có nhân viên trong phòng ban này
+            </div>
+            
+            <div v-else class="space-y-4">
+              <div v-for="group in groupedEmployees" :key="group.jobTitleId" class="border border-border rounded-lg overflow-hidden">
+                <div 
+                  class="bg-muted/50 px-4 py-2 flex items-center justify-between cursor-pointer"
+                  @click="toggleJobTitleGroup(group.jobTitleId)"
+                >
+                  <div class="flex items-center gap-2">
+                    <svg 
+                      class="w-4 h-4 transition-transform" 
+                      :class="expandedJobTitles.includes(group.jobTitleId) ? 'rotate-90' : ''"
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span class="font-medium text-sm">{{ group.jobTitle }}</span>
+                  </div>
+                  <BaseBadge size="sm" variant="outline">
+                    {{ group.employees.length }} người
+                  </BaseBadge>
                 </div>
-                <div class="flex-1">
-                  <p class="text-sm font-medium">{{ emp.full_name }}</p>
-                  <p class="text-xs text-muted-foreground">{{ emp.job_title || '' }}</p>
+                
+                <div v-if="expandedJobTitles.includes(group.jobTitleId)" class="divide-y divide-border">
+                  <div
+                    v-for="emp in group.employees"
+                    :key="emp.id"
+                    class="flex items-center gap-3 p-3 hover:bg-muted/30"
+                  >
+                    <div class="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
+                      {{ getInitials(emp.full_name) }}
+                    </div>
+                    <div class="flex-1">
+                      <p class="text-sm font-medium">{{ emp.full_name }}</p>
+                      <p class="text-xs text-muted-foreground">{{ emp.employee_code || emp.code }}</p>
+                    </div>
+                    <BaseBadge size="sm" :variant="getStatusVariant(emp.employment_status)">
+                      {{ getStatusLabel(emp.employment_status) }}
+                    </BaseBadge>
+                  </div>
                 </div>
-              </div>
-              <div v-if="loadingEmployees" class="text-center py-4 text-muted-foreground">
-                Đang tải...
-              </div>
-              <div v-else-if="!selectedDept.employees?.length" class="text-center py-8 text-muted-foreground">
-                Chưa có nhân viên
               </div>
             </div>
           </div>
@@ -157,24 +195,6 @@
         </BaseButton>
       </template>
     </BaseModal>
-
-    <BaseModal
-      v-model="showDeleteModal"
-      title="Xác nhận xóa"
-      size="sm"
-    >
-      <p class="text-muted-foreground">
-        Bạn có chắc chắn muốn xóa phòng ban <strong>{{ deleteTarget?.name }}</strong>?
-      </p>
-      <p class="text-sm text-destructive mt-2">Hành động này không thể hoàn tác.</p>
-
-      <template #footer>
-        <BaseButton variant="outline" @click="showDeleteModal = false" :disabled="deleting">Hủy</BaseButton>
-        <BaseButton variant="destructive" @click="handleDelete" :disabled="deleting">
-          {{ deleting ? 'Đang xóa...' : 'Xóa' }}
-        </BaseButton>
-      </template>
-    </BaseModal>
   </div>
 </template>
 
@@ -193,19 +213,18 @@ import { employeeService } from '../services/employeeService';
 const loading = ref(true);
 const error = ref('');
 const saving = ref(false);
-const deleting = ref(false);
+const togglingStatus = ref(false);
 const formError = ref('');
 
 const showModal = ref(false);
-const showDeleteModal = ref(false);
 const isEditing = ref(false);
 const editingId = ref(null);
-const deleteTarget = ref(null);
 
 const departments = ref([]);
 const allEmployees = ref([]);
 const selectedDept = ref(null);
 const loadingEmployees = ref(false);
+const expandedJobTitles = ref([]);
 
 const form = ref({
   code: '',
@@ -229,6 +248,27 @@ const parentOptions = computed(() => {
   return options;
 });
 
+const groupedEmployees = computed(() => {
+  if (!selectedDept.value?.employees?.length) return [];
+  
+  const groups = {};
+  selectedDept.value.employees.forEach(emp => {
+    const jobTitleId = emp.job_title_id || 0;
+    const jobTitle = emp.job_title || emp.job_title_name || 'Chưa phân loại';
+    
+    if (!groups[jobTitleId]) {
+      groups[jobTitleId] = {
+        jobTitleId,
+        jobTitle,
+        employees: []
+      };
+    }
+    groups[jobTitleId].employees.push(emp);
+  });
+  
+  return Object.values(groups).sort((a, b) => a.jobTitle.localeCompare(b.jobTitle));
+});
+
 const getInitials = (name) => {
   if (!name) return '';
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -238,6 +278,39 @@ const getParentName = (parentId) => {
   if (!parentId) return 'Không có';
   const parent = departments.value.find(d => d.id === parentId);
   return parent ? parent.name : 'Không có';
+};
+
+const getDeptEmployeeCount = (deptId) => {
+  return allEmployees.value.filter(emp => {
+    const empDeptId = Number(emp.department_id || 0);
+    return empDeptId === Number(deptId);
+  }).length;
+};
+
+const getStatusVariant = (status) => {
+  if (status === 'active' || status === true) return 'success';
+  if (status === 'probation') return 'warning';
+  return 'default';
+};
+
+const getStatusLabel = (status) => {
+  const labels = {
+    'active': 'Đang làm việc',
+    'probation': 'Thử việc',
+    'inactive': 'Nghỉ việc',
+    'terminated': 'Chấm dứt HĐ',
+    'resigned': 'Đã nghỉ'
+  };
+  return labels[status] || (status ? 'Đang làm việc' : 'Nghỉ việc');
+};
+
+const toggleJobTitleGroup = (jobTitleId) => {
+  const index = expandedJobTitles.value.indexOf(jobTitleId);
+  if (index === -1) {
+    expandedJobTitles.value.push(jobTitleId);
+  } else {
+    expandedJobTitles.value.splice(index, 1);
+  }
 };
 
 const resetForm = () => {
@@ -266,7 +339,7 @@ const openEditModal = (dept) => {
     code: dept.code || '',
     name: dept.name || '',
     parent_id: dept.parent_id ? String(dept.parent_id) : '',
-    is_active: dept.is_active ? 'true' : 'false'
+    is_active: dept.is_active !== false ? 'true' : 'false'
   };
   
   showModal.value = true;
@@ -280,6 +353,7 @@ const closeModal = () => {
 const selectDepartment = async (dept) => {
   selectedDept.value = { ...dept, employees: [] };
   loadingEmployees.value = true;
+  expandedJobTitles.value = [];
   
   try {
     const targetDeptId = Number(dept.id);
@@ -293,13 +367,42 @@ const selectDepartment = async (dept) => {
       ...dept, 
       employees: deptEmployees.map(emp => ({
         ...emp,
-        job_title: emp.job_title || emp.employment?.job_title?.name || ''
+        job_title: emp.job_title || emp.job_title_name || emp.employment?.job_title?.name || ''
       }))
     };
+    
+    if (groupedEmployees.value.length > 0) {
+      expandedJobTitles.value = [groupedEmployees.value[0].jobTitleId];
+    }
   } catch (err) {
     console.error('Error loading department employees:', err);
   } finally {
     loadingEmployees.value = false;
+  }
+};
+
+const toggleDepartmentStatus = async (dept) => {
+  try {
+    togglingStatus.value = true;
+    const newStatus = dept.is_active === false ? true : false;
+    
+    await departmentService.update(dept.id, {
+      is_active: newStatus
+    });
+    
+    await loadDepartments();
+    
+    if (selectedDept.value?.id === dept.id) {
+      const updatedDept = departments.value.find(d => d.id === dept.id);
+      if (updatedDept) {
+        selectedDept.value = { ...selectedDept.value, ...updatedDept };
+      }
+    }
+  } catch (err) {
+    console.error('Error toggling department status:', err);
+    alert(err.response?.data?.error || 'Có lỗi xảy ra khi cập nhật trạng thái');
+  } finally {
+    togglingStatus.value = false;
   }
 };
 
@@ -335,40 +438,16 @@ const handleSubmit = async () => {
     await loadDepartments();
     
     if (isEditing.value && selectedDept.value?.id === editingId.value) {
-      selectedDept.value = departments.value.find(d => d.id === editingId.value) || null;
+      const updatedDept = departments.value.find(d => d.id === editingId.value);
+      if (updatedDept) {
+        selectedDept.value = { ...selectedDept.value, ...updatedDept };
+      }
     }
   } catch (err) {
     console.error('Error saving department:', err);
     formError.value = err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra khi lưu';
   } finally {
     saving.value = false;
-  }
-};
-
-const confirmDelete = (dept) => {
-  deleteTarget.value = dept;
-  showDeleteModal.value = true;
-};
-
-const handleDelete = async () => {
-  if (!deleteTarget.value) return;
-  
-  try {
-    deleting.value = true;
-    await departmentService.delete(deleteTarget.value.id);
-    showDeleteModal.value = false;
-    
-    if (selectedDept.value?.id === deleteTarget.value.id) {
-      selectedDept.value = null;
-    }
-    
-    deleteTarget.value = null;
-    await loadDepartments();
-  } catch (err) {
-    console.error('Error deleting department:', err);
-    alert(err.response?.data?.error || 'Có lỗi xảy ra khi xóa');
-  } finally {
-    deleting.value = false;
   }
 };
 

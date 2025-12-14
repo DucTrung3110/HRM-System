@@ -46,8 +46,8 @@ class EmployeeController extends Controller
             "INSERT INTO employees (
                 code, user_id, full_name, gender, dob, personal_email, personal_phone,
                 emergency_contact_name, emergency_contact_phone, id_number, id_issue_date, id_issue_place,
-                tax_number, insurance_number, address, created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                tax_number, insurance_number, address, bank_name, bank_account, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 $data['code'] ?? null,
                 $data['user_id'] ?? null,
@@ -64,6 +64,8 @@ class EmployeeController extends Controller
                 $data['tax_number'] ?? null,
                 $data['insurance_number'] ?? null,
                 $data['address'] ?? null,
+                $data['bank_name'] ?? null,
+                $data['bank_account'] ?? null,
                 date('Y-m-d H:i:s'),
                 date('Y-m-d H:i:s'),
             ]
@@ -111,7 +113,7 @@ class EmployeeController extends Controller
              SET code = ?, user_id = ?, full_name = ?, gender = ?, dob = ?, personal_email = ?,
                  personal_phone = ?, emergency_contact_name = ?, emergency_contact_phone = ?,
                  id_number = ?, id_issue_date = ?, id_issue_place = ?, tax_number = ?, insurance_number = ?,
-                 address = ?, updated_at = ?
+                 address = ?, bank_name = ?, bank_account = ?, updated_at = ?
              WHERE id = ?",
             [
                 $data['code'] ?? $current['code'],
@@ -129,6 +131,8 @@ class EmployeeController extends Controller
                 $data['tax_number'] ?? $current['tax_number'],
                 $data['insurance_number'] ?? $current['insurance_number'],
                 $data['address'] ?? $current['address'],
+                $data['bank_name'] ?? $current['bank_name'] ?? null,
+                $data['bank_account'] ?? $current['bank_account'] ?? null,
                 date('Y-m-d H:i:s'),
                 $id
             ]
