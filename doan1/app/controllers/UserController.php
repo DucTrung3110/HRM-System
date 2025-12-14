@@ -51,7 +51,8 @@ class UserController extends Controller
         if (is_numeric($roles)) {
             $roles = [$roles];
         }
-        $assigner = $this->request->getAttribute('auth')['sub'] ?? null;
+        $auth = $this->request->getAttribute('auth');
+        $assigner = $auth['sub'] ?? null;
         foreach ($roles as $roleId) {
             $this->db->query(
                 "INSERT INTO user_roles (user_id, role_id, assigned_by, assigned_at) VALUES (?,?,?,?)",
@@ -92,7 +93,8 @@ class UserController extends Controller
                 $roles = [$roles];
             }
             $this->db->query("DELETE FROM user_roles WHERE user_id = ?", [$id]);
-            $assigner = $this->request->getAttribute('auth')['sub'] ?? null;
+            $auth = $this->request->getAttribute('auth');
+            $assigner = $auth['sub'] ?? null;
             $now = date('Y-m-d H:i:s');
             foreach ($roles as $roleId) {
                 $this->db->query(

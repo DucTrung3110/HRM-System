@@ -128,7 +128,7 @@ class Router
         $this->registerMiddleware('auth', function (array $params) use ($self) {
             $token = $self->request->bearerToken();
             $payload = Auth::parse($token, $_ENV['JWT_SECRET'] ?? '');
-            if (!$payload) {
+            if (!$payload || !isset($payload['sub'])) {
                 Response::error('Unauthorized', 401);
                 return false;
             }

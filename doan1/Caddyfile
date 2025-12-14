@@ -1,6 +1,9 @@
 devtapcode.io.vn {
   root * /var/www/html/public
   encode gzip zstd
+
+  try_files {path} {path}/ /index.php?{query}
+
   php_fastcgi php:9000
   file_server
 }

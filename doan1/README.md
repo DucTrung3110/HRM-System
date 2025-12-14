@@ -15,8 +15,21 @@ Lightweight PHP 8 MVC backend exposing RESTful JSON APIs for a small HRM system 
 
 ```bash
 composer install
-cp .env.example .env   # update DB + JWT_SECRET
+cp .env.example .env   # update DB credentials + JWT_SECRET
 php -S localhost:8000 -t public
+```
+
+Environment keys expected (sample values):
+
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=hrm
+DB_USER=hrm_admin
+DB_PASS=Hoang2002@
+DB_ROOT_PASS=NgocHoang2808@   # optional; for bootstrap/privileged DB ops
+DB_CHARSET=utf8mb4
+JWT_SECRET=secret
 ```
 
 ## Sample APIs

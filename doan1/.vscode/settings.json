@@ -1,0 +1,33 @@
+{
+  "sqltools.connections": [
+    {
+      "mysqlOptions": {
+        "authProtocol": "default",
+        "enableSsl": "Disabled"
+      },
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 3306,
+      "driver": "MySQL",
+      "name": "localhost",
+      "database": "sys",
+      "username": "root",
+      "password": "Hoang2002@"
+    },
+    {
+      "mysqlOptions": {
+        "authProtocol": "default",
+        "enableSsl": "Disabled"
+      },
+      "ssh": "Disabled",
+      "previewLimit": 50,
+      "server": "127.0.0.1",
+      "port": 3307,
+      "driver": "MySQL",
+      "database": "hrm",
+      "username": "hrm_admin",
+      "password": "Hoang2002@",
+      "name": "devtapcode"
+    }
+  ]
+}
