@@ -1,9 +1,7 @@
 {
   "buildCommand": "npm run build",
-  "devCommand": "npm run dev",
   "installCommand": "npm install",
   "outputDirectory": "dist/public",
-  "public": "dist/public",
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
