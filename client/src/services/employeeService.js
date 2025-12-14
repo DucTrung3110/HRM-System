@@ -40,8 +40,27 @@ export const employeeService = {
   },
 
   // Update employee
+  // IMPORTANT: Laravel backend expects employment data nested in 'employment' object for history tracking
   update: async (id, data) => {
-    const response = await axiosClient.patch(`/employees/${id}`, data);
+    const employmentFields = ['department_id', 'job_title_id', 'start_date', 'end_date', 'salary', 
+                              'work_location', 'employment_type', 'employment_status', 'report_to'];
+    
+    const hasEmploymentFields = employmentFields.some(field => data[field] !== undefined);
+    
+    let payload = { ...data };
+    
+    if (hasEmploymentFields) {
+      const employment = {};
+      employmentFields.forEach(field => {
+        if (data[field] !== undefined) {
+          employment[field] = data[field];
+          delete payload[field];
+        }
+      });
+      payload.employment = employment;
+    }
+    
+    const response = await axiosClient.patch(`/employees/${id}`, payload);
     return response.data;
   },
 

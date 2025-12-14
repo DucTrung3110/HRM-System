@@ -10,25 +10,20 @@
     </div>
 
     <template v-else>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          <button
-            @click="$router.push('/employees')"
-            class="p-2 rounded-lg hover:bg-muted"
-            data-testid="button-back"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div>
-            <h1 class="text-3xl font-bold text-foreground">{{ employee?.full_name }}</h1>
-            <p class="text-muted-foreground mt-1">{{ employee?.code || employee?.employee_code }}</p>
-          </div>
+      <div class="flex items-center gap-4">
+        <button
+          @click="$router.push('/employees')"
+          class="p-2 rounded-lg hover:bg-muted"
+          data-testid="button-back"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <div>
+          <h1 class="text-3xl font-bold text-foreground">{{ employee?.full_name }}</h1>
+          <p class="text-muted-foreground mt-1">{{ employee?.code || employee?.employee_code }}</p>
         </div>
-        <BaseBadge :variant="getStatusVariant(employee?.employment_status)" size="lg">
-          {{ getStatusText(employee?.employment_status) }}
-        </BaseBadge>
       </div>
       
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

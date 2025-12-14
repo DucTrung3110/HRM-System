@@ -501,6 +501,22 @@ const openEditModal = (employee) => {
   isEditing.value = true;
   editingId.value = employee.id;
   
+  // Try to find department_id by matching name if ID not provided
+  let deptId = employee.department_id ? String(employee.department_id) : '';
+  if (!deptId && (employee.department || employee.department_name)) {
+    const deptName = employee.department || employee.department_name;
+    const matchedDept = departmentOptions.value.find(d => d.label === deptName);
+    if (matchedDept) deptId = matchedDept.value;
+  }
+  
+  // Try to find job_title_id by matching name if ID not provided
+  let jobId = employee.job_title_id ? String(employee.job_title_id) : '';
+  if (!jobId && (employee.job_title || employee.job_title_name)) {
+    const jobName = employee.job_title || employee.job_title_name;
+    const matchedJob = jobTitleOptions.value.find(j => j.label === jobName);
+    if (matchedJob) jobId = matchedJob.value;
+  }
+  
   form.value = {
     employee_code: employee.employee_code || employee.code || '',
     full_name: employee.full_name || '',
@@ -510,8 +526,8 @@ const openEditModal = (employee) => {
     date_of_birth: employee.date_of_birth || employee.dob || '',
     gender: employee.gender || '',
     address: employee.address || '',
-    department_id: employee.department_id ? String(employee.department_id) : '',
-    job_title_id: employee.job_title_id ? String(employee.job_title_id) : '',
+    department_id: deptId,
+    job_title_id: jobId,
     hire_date: employee.hire_date || employee.start_date || '',
     employment_status: employee.employment_status || 'active',
     employment_type: employee.employment_type || 'fulltime'
@@ -585,8 +601,27 @@ const handleStatusChange = async () => {
   try {
     updatingStatus.value = true;
     
+    // Find current department_id and job_title_id by name matching
+    let deptId = statusTarget.value.department_id;
+    if (!deptId && (statusTarget.value.department || statusTarget.value.department_name)) {
+      const deptName = statusTarget.value.department || statusTarget.value.department_name;
+      const matchedDept = departmentOptions.value.find(d => d.label === deptName);
+      if (matchedDept) deptId = parseInt(matchedDept.value);
+    }
+    
+    let jobId = statusTarget.value.job_title_id;
+    if (!jobId && (statusTarget.value.job_title || statusTarget.value.job_title_name)) {
+      const jobName = statusTarget.value.job_title || statusTarget.value.job_title_name;
+      const matchedJob = jobTitleOptions.value.find(j => j.label === jobName);
+      if (matchedJob) jobId = parseInt(matchedJob.value);
+    }
+    
+    // Always use today's date for new employment history so it becomes the latest record
     const payload = {
-      employment_status: newStatus.value
+      employment_status: newStatus.value,
+      department_id: deptId || null,
+      job_title_id: jobId || null,
+      start_date: new Date().toISOString().split('T')[0]
     };
     
     if (terminationDate.value) {
