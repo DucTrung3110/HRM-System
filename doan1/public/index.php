@@ -2,6 +2,19 @@
 
 declare(strict_types=1);
 
+// ============ CORS HEADERS ============
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Access-Control-Max-Age: 86400");
+
+// Xử lý preflight OPTIONS request
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+// ============ END CORS ============
+
 $root = dirname(__DIR__);
 
 // Composer autoload if installed; fallback to simple class loader.
