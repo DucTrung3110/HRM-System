@@ -1,11 +1,13 @@
 <template>
   <div id="app" :class="{ dark: isDark }">
     <router-view />
+    <ToastContainer />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import ToastContainer from './components/ToastContainer.vue';
 
 const isDark = ref(false);
 
