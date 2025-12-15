@@ -195,6 +195,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { authService } from '../services/authService';
+import { useNotificationStore } from '../stores/notificationStore';
 import ThemeToggle from '../components/ThemeToggle.vue';
 import IconDashboard from '../components/IconDashboard.vue';
 import IconUser from '../components/IconUser.vue';
@@ -215,15 +216,36 @@ const searchContainerRef = ref(null);
 
 const isNotificationsOpen = ref(false);
 const notificationContainerRef = ref(null);
-const notifications = ref([
-  { id: 1, message: 'Chào mừng bạn đến hệ thống', time: 'Vừa xong', read: false },
-  { id: 2, message: 'Cập nhật hồ sơ thành công', time: '5 phút trước', read: false },
-  { id: 3, message: 'Có 3 đơn nghỉ phép chờ duyệt', time: '1 giờ trước', read: false },
-  { id: 4, message: 'Đã thêm nhân viên mới vào hệ thống', time: '2 giờ trước', read: true },
-  { id: 5, message: 'Bảng lương tháng 12 đã sẵn sàng', time: 'Hôm qua', read: true }
-]);
 
-const unreadCount = computed(() => notifications.value.filter(n => !n.read).length);
+const notificationStore = useNotificationStore();
+const storeNotifications = notificationStore.notifications;
+const storeUnreadCount = notificationStore.unreadCount;
+
+const notifications = computed(() => {
+  return storeNotifications.value.map(n => ({
+    id: n.id,
+    message: n.message,
+    time: formatTime(n.timestamp),
+    read: n.read
+  }));
+});
+
+const unreadCount = computed(() => storeUnreadCount.value);
+
+const formatTime = (date) => {
+  if (!date) return '';
+  const now = new Date();
+  const diff = now - new Date(date);
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  
+  if (minutes < 1) return 'Vừa xong';
+  if (minutes < 60) return `${minutes} phút trước`;
+  if (hours < 24) return `${hours} giờ trước`;
+  if (days === 1) return 'Hôm qua';
+  return `${days} ngày trước`;
+};
 
 const handleLogout = () => {
   if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
@@ -299,14 +321,11 @@ const toggleNotifications = () => {
 };
 
 const markAsRead = (id) => {
-  const notification = notifications.value.find(n => n.id === id);
-  if (notification) {
-    notification.read = true;
-  }
+  notificationStore.markAsRead(id);
 };
 
 const markAllAsRead = () => {
-  notifications.value.forEach(n => n.read = true);
+  notificationStore.markAllAsRead();
 };
 
 const handleClickOutside = (event) => {

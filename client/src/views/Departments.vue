@@ -209,6 +209,9 @@ import BaseModal from '../components/BaseModal.vue';
 import IconBuilding from '../components/IconBuilding.vue';
 import { departmentService } from '../services/departmentService';
 import { employeeService } from '../services/employeeService';
+import { useNotificationStore } from '../stores/notificationStore';
+
+const notificationStore = useNotificationStore();
 
 const loading = ref(true);
 const error = ref('');
@@ -422,6 +425,8 @@ const toggleDepartmentStatus = async (dept) => {
       };
     }
     
+    notificationStore.addSuccess(`Đã ${newStatusBool ? 'kích hoạt' : 'tạm dừng'} phòng ban "${dept.name}"`);
+    
     // Reload from server to ensure consistency
     await loadDepartments();
     
@@ -434,7 +439,8 @@ const toggleDepartmentStatus = async (dept) => {
     }
   } catch (err) {
     console.error('Error toggling department status:', err);
-    alert(err.response?.data?.error || 'Có lỗi xảy ra khi cập nhật trạng thái');
+    const errorMsg = err.response?.data?.error || 'Có lỗi xảy ra khi cập nhật trạng thái';
+    notificationStore.addError(`Lỗi: ${errorMsg}`);
   } finally {
     togglingStatus.value = false;
   }
@@ -464,8 +470,10 @@ const handleSubmit = async () => {
 
     if (isEditing.value) {
       await departmentService.update(editingId.value, payload);
+      notificationStore.addSuccess(`Đã cập nhật phòng ban "${form.value.name}"`);
     } else {
       await departmentService.create(payload);
+      notificationStore.addSuccess(`Đã thêm phòng ban "${form.value.name}"`);
     }
     
     closeModal();
@@ -479,7 +487,9 @@ const handleSubmit = async () => {
     }
   } catch (err) {
     console.error('Error saving department:', err);
-    formError.value = err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra khi lưu';
+    const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra khi lưu';
+    formError.value = errorMsg;
+    notificationStore.addError(`Lỗi: ${errorMsg}`);
   } finally {
     saving.value = false;
   }

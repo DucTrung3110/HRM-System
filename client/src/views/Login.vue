@@ -53,8 +53,10 @@ import { useRouter } from 'vue-router';
 import api from '@/services/api';
 import BaseInput from '@/components/BaseInput.vue';
 import BaseButton from '@/components/BaseButton.vue';
+import { useNotificationStore } from '@/stores/notificationStore';
 
 const router = useRouter();
+const notificationStore = useNotificationStore();
 const email = ref('');
 const password = ref('');
 const loading = ref(false);
@@ -81,10 +83,14 @@ const handleLogin = async () => {
     const isAdmin = user.roles?.includes('ADMIN') || user.roles?.includes('admin');
     localStorage.setItem('role', JSON.stringify({ code: isAdmin ? 'ADMIN' : 'USER' }));
 
+    // Add welcome notification
+    notificationStore.addSuccess(`Chào mừng ${user.name || 'bạn'} quay trở lại!`);
+
     // Redirect to dashboard
     router.push('/');
   } catch (err: any) {
     error.value = err.response?.data?.error || 'Đăng nhập thất bại';
+    notificationStore.addError('Đăng nhập thất bại: ' + (err.response?.data?.error || 'Lỗi không xác định'));
   } finally {
     loading.value = false;
   }

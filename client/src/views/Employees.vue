@@ -329,8 +329,10 @@ import IconUser from '../components/IconUser.vue';
 import { employeeService } from '../services/employeeService';
 import { departmentService } from '../services/departmentService';
 import { jobTitleService } from '../services/jobTitleService';
+import { useNotificationStore } from '../stores/notificationStore';
 
 const router = useRouter();
+const notificationStore = useNotificationStore();
 
 const loading = ref(true);
 const error = ref('');
@@ -370,7 +372,7 @@ const form = ref({
   job_title_id: '',
   hire_date: '',
   employment_status: 'active',
-  employment_type: 'fulltime',
+  employment_type: 'full_time',
   bank_name: '',
   bank_account: ''
 });
@@ -400,8 +402,8 @@ const employmentStatusOptions = [
 ];
 
 const employmentTypeOptions = [
-  { label: 'Toàn thời gian', value: 'fulltime' },
-  { label: 'Bán thời gian', value: 'parttime' },
+  { label: 'Toàn thời gian', value: 'full_time' },
+  { label: 'Bán thời gian', value: 'part_time' },
   { label: 'Hợp đồng', value: 'contract' },
   { label: 'Thực tập', value: 'intern' },
 ];
@@ -411,6 +413,18 @@ const genderOptions = [
   { label: 'Nữ', value: 'female' },
   { label: 'Khác', value: 'other' },
 ];
+
+const normalizeEmploymentType = (value) => {
+  const mapping = {
+    'fulltime': 'full_time',
+    'full-time': 'full_time',
+    'Full-time': 'full_time',
+    'parttime': 'part_time',
+    'part-time': 'part_time',
+    'Part-time': 'part_time',
+  };
+  return mapping[value] || value || 'full_time';
+};
 
 const departmentFilterOptions = computed(() => [
   ...departmentOptions.value
@@ -497,7 +511,7 @@ const resetForm = () => {
     job_title_id: '',
     hire_date: '',
     employment_status: 'active',
-    employment_type: 'fulltime',
+    employment_type: 'full_time',
     bank_name: '',
     bank_account: ''
   };
@@ -557,7 +571,7 @@ const openEditModal = (employee) => {
     job_title_id: jobId,
     hire_date: employee.hire_date || employee.start_date || '',
     employment_status: employee.employment_status || 'active',
-    employment_type: employee.employment_type || 'fulltime',
+    employment_type: normalizeEmploymentType(employee.employment_type),
     bank_name: employee.bank_name || '',
     bank_account: employee.bank_account || ''
   };
@@ -613,7 +627,7 @@ const handleSubmit = async () => {
         job_title_id: isNaN(jobIdParsed) ? null : jobIdParsed,
         start_date: form.value.hire_date || new Date().toISOString().split('T')[0],
         employment_status: form.value.employment_status || 'active',
-        employment_type: form.value.employment_type || 'fulltime'
+        employment_type: normalizeEmploymentType(form.value.employment_type)
       }
     };
 
@@ -621,15 +635,19 @@ const handleSubmit = async () => {
 
     if (isEditing.value) {
       await employeeService.update(editingId.value, payload);
+      notificationStore.addSuccess(`Đã cập nhật nhân viên "${form.value.full_name}"`);
     } else {
       await employeeService.create(payload);
+      notificationStore.addSuccess(`Đã thêm nhân viên "${form.value.full_name}"`);
     }
     
     closeModal();
     await loadEmployees();
   } catch (err) {
     console.error('Error saving employee:', err);
-    formError.value = err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra khi lưu';
+    const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra khi lưu';
+    formError.value = errorMsg;
+    notificationStore.addError(`Lỗi: ${errorMsg}`);
   } finally {
     saving.value = false;
   }
