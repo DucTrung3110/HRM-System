@@ -60,8 +60,8 @@
       </BaseCard>
     </div>
     
-    <!-- Salary Components -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Salary Components (only show when employee is selected) -->
+    <div v-if="selectedEmployee" class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <BaseCard title="Thu nhập">
         <div class="space-y-3">
           <div
@@ -70,11 +70,11 @@
             class="flex items-center justify-between py-3 border-b border-border last:border-0"
           >
             <div>
-              <p class="font-medium">{{ item.salary_component?.name }}</p>
-              <p class="text-xs text-muted-foreground">{{ item.salary_component?.category }}</p>
+              <p class="font-medium">{{ item.component_name || item.name }}</p>
+              <p class="text-xs text-muted-foreground">{{ getCategoryLabel(item.category || item.type) }}</p>
             </div>
             <p class="font-semibold text-green-600 dark:text-green-400">
-              +{{ formatMoney(item.amount) }}
+              +{{ formatMoney(item.amount || 0) }}
             </p>
           </div>
           <div v-if="!earnings.length" class="text-center py-8 text-muted-foreground">
@@ -91,11 +91,11 @@
             class="flex items-center justify-between py-3 border-b border-border last:border-0"
           >
             <div>
-              <p class="font-medium">{{ item.salary_component?.name }}</p>
-              <p class="text-xs text-muted-foreground">{{ item.salary_component?.category }}</p>
+              <p class="font-medium">{{ item.component_name || item.name }}</p>
+              <p class="text-xs text-muted-foreground">{{ getCategoryLabel(item.category || item.type) }}</p>
             </div>
             <p class="font-semibold text-red-600 dark:text-red-400">
-              -{{ formatMoney(item.amount) }}
+              -{{ formatMoney(item.amount || 0) }}
             </p>
           </div>
           <div v-if="!deductions.length" class="text-center py-8 text-muted-foreground">
@@ -104,6 +104,13 @@
         </div>
       </BaseCard>
     </div>
+    
+    <!-- Prompt to select employee -->
+    <BaseCard v-else>
+      <div class="text-center py-8 text-muted-foreground">
+        <p>Vui lòng chọn nhân viên để xem chi tiết lương</p>
+      </div>
+    </BaseCard>
     
     <!-- Salary History -->
     <BaseCard title="Lịch sử lương">
@@ -149,11 +156,11 @@ const history = ref([]);
 const employeeOptions = ref([{ label: 'Chọn nhân viên', value: '' }]);
 
 const earnings = computed(() => {
-  return salaryComponents.value.filter(s => s.salary_component?.type === 'earning');
+  return salaryComponents.value.filter(s => s.type === 'earning');
 });
 
 const deductions = computed(() => {
-  return salaryComponents.value.filter(s => s.salary_component?.type === 'deduction');
+  return salaryComponents.value.filter(s => s.type === 'deduction');
 });
 
 const summary = computed(() => {
@@ -178,6 +185,19 @@ const formatMoney = (amount) => {
     style: 'currency',
     currency: 'VND'
   }).format(amount);
+};
+
+const getCategoryLabel = (category) => {
+  const labels = {
+    'earning': 'Thu nhập',
+    'deduction': 'Khấu trừ',
+    'basic': 'Lương cơ bản',
+    'allowance': 'Phụ cấp',
+    'bonus': 'Thưởng',
+    'insurance': 'Bảo hiểm',
+    'tax': 'Thuế'
+  };
+  return labels[category] || category || '';
 };
 
 const loadSalary = async () => {
