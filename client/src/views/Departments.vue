@@ -162,8 +162,8 @@
           v-model="form.code" 
           label="Mã phòng ban" 
           required 
-          :disabled="isEditing"
-          placeholder="VD: IT-001"
+          disabled
+          placeholder="VD: DEP01"
         />
         <BaseInput 
           v-model="form.name" 
@@ -313,6 +313,17 @@ const toggleJobTitleGroup = (jobTitleId) => {
   }
 };
 
+const generateDepartmentCode = () => {
+  const existingCodes = departments.value
+    .map(d => d.code || '')
+    .filter(code => /^DEP\d+$/i.test(code))
+    .map(code => parseInt(code.replace(/^DEP/i, ''), 10));
+  
+  const maxNum = existingCodes.length > 0 ? Math.max(...existingCodes) : 0;
+  const nextNum = maxNum + 1;
+  return `DEP${String(nextNum).padStart(2, '0')}`;
+};
+
 const resetForm = () => {
   form.value = {
     code: '',
@@ -327,6 +338,7 @@ const openCreateModal = () => {
   resetForm();
   isEditing.value = false;
   editingId.value = null;
+  form.value.code = generateDepartmentCode();
   showModal.value = true;
 };
 
@@ -384,7 +396,7 @@ const selectDepartment = async (dept) => {
 const toggleDepartmentStatus = async (dept) => {
   try {
     togglingStatus.value = true;
-    const newStatus = dept.is_active === false ? true : false;
+    const newStatus = (dept.is_active === false || dept.is_active === 0) ? 1 : 0;
     
     await departmentService.update(dept.id, {
       is_active: newStatus
@@ -425,7 +437,7 @@ const handleSubmit = async () => {
       code: form.value.code,
       name: form.value.name,
       parent_id: form.value.parent_id ? parseInt(form.value.parent_id) : null,
-      is_active: form.value.is_active === 'true'
+      is_active: form.value.is_active === 'true' ? 1 : 0
     };
 
     if (isEditing.value) {

@@ -32,14 +32,12 @@
           />
           <BaseSelect
             v-model="filters.department"
-            :options="departmentFilterOptions"
-            placeholder="Tất cả phòng ban"
+            :options="[{ label: 'Tất cả phòng ban', value: '' }, ...departmentFilterOptions]"
             data-testid="select-department-filter"
           />
           <BaseSelect
             v-model="filters.status"
             :options="statusFilterOptions"
-            placeholder="Tất cả trạng thái"
             data-testid="select-status-filter"
           />
           <BaseButton
@@ -386,6 +384,7 @@ const columns = [
 ];
 
 const statusFilterOptions = [
+  { label: 'Tất cả trạng thái', value: '' },
   { label: 'Đang làm việc', value: 'active' },
   { label: 'Thử việc', value: 'probation' },
   { label: 'Nghỉ việc', value: 'inactive' },
@@ -414,7 +413,6 @@ const genderOptions = [
 ];
 
 const departmentFilterOptions = computed(() => [
-  { label: 'Tất cả phòng ban', value: '' },
   ...departmentOptions.value
 ]);
 
@@ -605,11 +603,13 @@ const handleSubmit = async () => {
       address: form.value.address || null,
       bank_name: form.value.bank_name || null,
       bank_account: form.value.bank_account || null,
-      department_id: form.value.department_id ? parseInt(form.value.department_id) : null,
-      job_title_id: form.value.job_title_id ? parseInt(form.value.job_title_id) : null,
-      start_date: form.value.hire_date || null,
-      employment_status: form.value.employment_status,
-      employment_type: form.value.employment_type
+      employment: {
+        department_id: form.value.department_id ? parseInt(form.value.department_id) : null,
+        job_title_id: form.value.job_title_id ? parseInt(form.value.job_title_id) : null,
+        start_date: form.value.hire_date || null,
+        employment_status: form.value.employment_status,
+        employment_type: form.value.employment_type
+      }
     };
 
     if (isEditing.value) {
@@ -650,7 +650,7 @@ const handleStatusChange = async () => {
     }
     
     // Always use today's date for new employment history so it becomes the latest record
-    const payload = {
+    const employment = {
       employment_status: newStatus.value,
       department_id: deptId || null,
       job_title_id: jobId || null,
@@ -658,10 +658,10 @@ const handleStatusChange = async () => {
     };
     
     if (terminationDate.value) {
-      payload.end_date = terminationDate.value;
+      employment.end_date = terminationDate.value;
     }
     
-    await employeeService.update(statusTarget.value.id, payload);
+    await employeeService.update(statusTarget.value.id, { employment });
     const index = employees.value.findIndex(e => e.id === statusTarget.value.id);
     if (index !== -1) {
       employees.value[index] = { ...employees.value[index], employment_status: newStatus.value };
