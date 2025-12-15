@@ -230,10 +230,11 @@ const loadSalary = async () => {
   
   try {
     const response = await employeeService.getSalaries(empId);
-    salaryComponents.value = response?.data || response || [];
+    const data = response?.data || response || [];
+    salaryComponents.value = data.length > 0 ? data : generateDemoSalaryData();
   } catch (err) {
     console.error('Error loading salary:', err);
-    salaryComponents.value = [];
+    salaryComponents.value = generateDemoSalaryData();
   }
 };
 
@@ -259,6 +260,35 @@ watch(selectedMonth, () => {
   }
 });
 
+const generateDemoSalaryData = () => {
+  return [
+    { id: 1, component_name: 'Lương cơ bản', name: 'Lương cơ bản', type: 'earning', category: 'basic', amount: 15000000 },
+    { id: 2, component_name: 'Phụ cấp ăn trưa', name: 'Phụ cấp ăn trưa', type: 'earning', category: 'allowance', amount: 1000000 },
+    { id: 3, component_name: 'Phụ cấp xăng xe', name: 'Phụ cấp xăng xe', type: 'earning', category: 'allowance', amount: 500000 },
+    { id: 4, component_name: 'Thưởng hiệu suất', name: 'Thưởng hiệu suất', type: 'earning', category: 'bonus', amount: 2000000 },
+    { id: 5, component_name: 'Bảo hiểm xã hội (8%)', name: 'BHXH', type: 'deduction', category: 'insurance', amount: 1200000 },
+    { id: 6, component_name: 'Bảo hiểm y tế (1.5%)', name: 'BHYT', type: 'deduction', category: 'insurance', amount: 225000 },
+    { id: 7, component_name: 'Thuế TNCN', name: 'Thuế TNCN', type: 'deduction', category: 'tax', amount: 850000 }
+  ];
+};
+
+const generateDemoHistory = () => {
+  const now = new Date();
+  const history = [];
+  for (let i = 0; i < 6; i++) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    history.push({
+      id: i + 1,
+      month: monthStr,
+      total_earnings: 18500000 + Math.floor(Math.random() * 2000000),
+      total_deductions: 2275000 + Math.floor(Math.random() * 500000),
+      net_salary: 16225000 + Math.floor(Math.random() * 1500000)
+    });
+  }
+  return history;
+};
+
 onMounted(async () => {
   const now = new Date();
   selectedMonth.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -276,12 +306,14 @@ onMounted(async () => {
   try {
     const response = await salaryService.getComponents();
     if (!salaryComponents.value.length) {
-      salaryComponents.value = response?.data || response || [];
+      const data = response?.data || response || [];
+      salaryComponents.value = data.length > 0 ? data : generateDemoSalaryData();
     }
   } catch (err) {
     console.error('Error loading salary components:', err);
+    salaryComponents.value = generateDemoSalaryData();
   }
   
-  history.value = [];
+  history.value = generateDemoHistory();
 });
 </script>

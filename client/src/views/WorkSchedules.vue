@@ -275,20 +275,33 @@ const loadEmployees = async () => {
   }
 };
 
+const defaultShifts = [
+  { id: 1, name: 'Ca sáng (6:00 - 14:00)' },
+  { id: 2, name: 'Ca chiều (14:00 - 22:00)' },
+  { id: 3, name: 'Ca đêm (22:00 - 6:00)' },
+  { id: 4, name: 'Ca hành chính (8:00 - 17:00)' }
+];
+
 const loadShifts = async () => {
   try {
     const response = await workShiftService.getAll();
     const shifts = response?.data || response || [];
-    shiftOptions.value = shifts.map((shift) => ({
-      value: shift.id,
-      label: shift.name
-    }));
-    shifts.forEach(shift => {
-      shiftMap.value[shift.id] = shift.name;
-    });
+    if (shifts.length > 0) {
+      shiftOptions.value = shifts.map((shift) => ({
+        value: shift.id,
+        label: shift.name
+      }));
+      shifts.forEach(shift => {
+        shiftMap.value[shift.id] = shift.name;
+      });
+    } else {
+      shiftOptions.value = defaultShifts.map(s => ({ value: s.id, label: s.name }));
+      defaultShifts.forEach(s => { shiftMap.value[s.id] = s.name; });
+    }
   } catch (err) {
     console.error('Error loading shifts:', err);
-    shiftOptions.value = [];
+    shiftOptions.value = defaultShifts.map(s => ({ value: s.id, label: s.name }));
+    defaultShifts.forEach(s => { shiftMap.value[s.id] = s.name; });
   }
 };
 

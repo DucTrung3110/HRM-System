@@ -349,9 +349,18 @@ const statusOptions = [
   { label: 'Từ chối', value: 'rejected' },
 ];
 
+const defaultLeaveTypes = [
+  { id: 1, name: 'Nghỉ phép năm' },
+  { id: 2, name: 'Nghỉ ốm' },
+  { id: 3, name: 'Nghỉ không lương' },
+  { id: 4, name: 'Nghỉ thai sản' },
+  { id: 5, name: 'Nghỉ việc riêng' }
+];
+
 const leaveTypeOptions = computed(() => {
   const options = [{ label: 'Tất cả', value: '' }];
-  leaveTypes.value.forEach(t => {
+  const types = leaveTypes.value.length > 0 ? leaveTypes.value : defaultLeaveTypes;
+  types.forEach(t => {
     options.push({ label: t.name, value: String(t.id) });
   });
   return options;

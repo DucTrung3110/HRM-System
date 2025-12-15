@@ -110,7 +110,19 @@
             </div>
           </div>
           <p v-else-if="isAdmin" class="text-sm text-muted-foreground">Chọn nhân viên để chấm công</p>
-          <p v-else class="text-sm text-muted-foreground">Đang tải thông tin...</p>
+          <div v-else-if="!clockEmployeeId && !clockLoading">
+            <BaseButton 
+              @click="handleSelfCheckIn" 
+              :disabled="clockProcessing"
+              class="px-8 py-4 text-lg bg-green-600 hover:bg-green-700 text-white"
+            >
+              <svg class="w-6 h-6 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+              {{ clockProcessing ? 'Đang xử lý...' : 'CHECK IN' }}
+            </BaseButton>
+          </div>
+          <p v-else-if="clockLoading" class="text-sm text-muted-foreground">Đang tải thông tin...</p>
         </div>
       </div>
     </BaseCard>
@@ -382,6 +394,36 @@ const checkTodayStatus = async (employeeId) => {
 watch(clockEmployeeId, (newId) => {
   checkTodayStatus(newId);
 });
+
+const handleSelfCheckIn = async () => {
+  if (clockProcessing.value) return;
+  
+  try {
+    clockProcessing.value = true;
+    const user = currentUser.value;
+    const empId = user?.employee_id;
+    
+    if (empId) {
+      try {
+        await attendanceService.checkIn(parseInt(empId), 'present');
+        toast.success('Check-in thành công!');
+        clockEmployeeId.value = String(empId);
+        await checkTodayStatus(empId);
+        await loadData();
+      } catch (apiErr) {
+        if (apiErr.response?.status === 403) {
+          toast.error('Vui lòng đăng nhập để sử dụng tính năng này.');
+        } else {
+          toast.error(apiErr.response?.data?.error || 'Có lỗi xảy ra khi check-in');
+        }
+      }
+    } else {
+      toast.error('Vui lòng đăng nhập để sử dụng tính năng chấm công.');
+    }
+  } finally {
+    clockProcessing.value = false;
+  }
+};
 
 const handleQuickCheckIn = async () => {
   if (!clockEmployeeId.value || clockProcessing.value) return;
