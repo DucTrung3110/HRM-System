@@ -434,7 +434,11 @@ const toggleDepartmentStatus = async (dept) => {
     if (selectedDept.value?.id === dept.id) {
       const updatedDept = departments.value.find(d => d.id === dept.id);
       if (updatedDept) {
-        selectedDept.value = { ...selectedDept.value, ...updatedDept };
+        selectedDept.value = { 
+          ...selectedDept.value, 
+          ...updatedDept,
+          is_active: updatedDept.is_active === 1 || updatedDept.is_active === true || updatedDept.is_active === '1'
+        };
       }
     }
   } catch (err) {
@@ -482,7 +486,11 @@ const handleSubmit = async () => {
     if (isEditing.value && selectedDept.value?.id === editingId.value) {
       const updatedDept = departments.value.find(d => d.id === editingId.value);
       if (updatedDept) {
-        selectedDept.value = { ...selectedDept.value, ...updatedDept };
+        selectedDept.value = { 
+          ...selectedDept.value, 
+          ...updatedDept,
+          is_active: updatedDept.is_active === 1 || updatedDept.is_active === true || updatedDept.is_active === '1'
+        };
       }
     }
   } catch (err) {
@@ -498,7 +506,11 @@ const handleSubmit = async () => {
 const loadDepartments = async () => {
   try {
     const response = await departmentService.getAll();
-    departments.value = response?.data || response || [];
+    const rawDepts = response?.data || response || [];
+    departments.value = rawDepts.map(d => ({
+      ...d,
+      is_active: d.is_active === 1 || d.is_active === true || d.is_active === '1'
+    }));
   } catch (err) {
     console.error('Error loading departments:', err);
   }
@@ -514,7 +526,11 @@ onMounted(async () => {
       employeeService.getAll()
     ]);
     
-    departments.value = deptsRes?.data || deptsRes || [];
+    const rawDepts = deptsRes?.data || deptsRes || [];
+    departments.value = rawDepts.map(d => ({
+      ...d,
+      is_active: d.is_active === 1 || d.is_active === true || d.is_active === '1'
+    }));
     allEmployees.value = empsRes?.data || empsRes || [];
   } catch (err) {
     console.error('Departments API Error:', err);

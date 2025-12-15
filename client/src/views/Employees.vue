@@ -409,9 +409,9 @@ const employmentTypeOptions = [
 ];
 
 const genderOptions = [
-  { label: 'Nam', value: 'male' },
-  { label: 'Nữ', value: 'female' },
-  { label: 'Khác', value: 'other' },
+  { label: 'Nam', value: 'M' },
+  { label: 'Nữ', value: 'F' },
+  { label: 'Khác', value: 'O' },
 ];
 
 const normalizeEmploymentType = (value) => {
