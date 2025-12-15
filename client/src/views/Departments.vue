@@ -397,13 +397,35 @@ const toggleDepartmentStatus = async (dept) => {
   try {
     togglingStatus.value = true;
     const newStatus = (dept.is_active === false || dept.is_active === 0) ? 1 : 0;
+    const newStatusBool = newStatus === 1;
     
     await departmentService.update(dept.id, {
       is_active: newStatus
     });
     
+    // Immediately update local state for instant UI feedback
+    const deptIndex = departments.value.findIndex(d => d.id === dept.id);
+    if (deptIndex !== -1) {
+      const updatedDepts = [...departments.value];
+      updatedDepts[deptIndex] = { 
+        ...updatedDepts[deptIndex], 
+        is_active: newStatusBool 
+      };
+      departments.value = updatedDepts;
+    }
+    
+    // Update selectedDept if it's the one being toggled
+    if (selectedDept.value?.id === dept.id) {
+      selectedDept.value = { 
+        ...selectedDept.value, 
+        is_active: newStatusBool 
+      };
+    }
+    
+    // Reload from server to ensure consistency
     await loadDepartments();
     
+    // Re-select the department to refresh its details
     if (selectedDept.value?.id === dept.id) {
       const updatedDept = departments.value.find(d => d.id === dept.id);
       if (updatedDept) {

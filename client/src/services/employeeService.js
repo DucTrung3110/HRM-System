@@ -17,25 +17,49 @@ export const employeeService = {
   // Create new employee
   // IMPORTANT: Laravel backend requires employment data nested in 'employment' object
   create: async (data) => {
-    const response = await axiosClient.post('/employees', {
-      code: data.code,
-      user_id: data.user_id || null,
-      full_name: data.full_name,
-      gender: data.gender,
-      dob: data.dob,
-      personal_email: data.personal_email,
-      personal_phone: data.personal_phone,
-      employment: {
-        department_id: data.department_id,
-        job_title_id: data.job_title_id,
-        start_date: data.start_date,
-        salary: data.salary,
-        work_location: data.work_location,
-        employment_type: data.employment_type,
-        employment_status: data.employment_status,
-        report_to: data.report_to
-      }
-    });
+    // If data already has nested employment object, use it directly
+    // Otherwise build the payload from flat data
+    let payload;
+    
+    if (data.employment) {
+      // Data is already properly structured from the view
+      payload = {
+        code: data.code,
+        user_id: data.user_id || null,
+        full_name: data.full_name,
+        gender: data.gender || null,
+        dob: data.dob || null,
+        personal_email: data.personal_email || null,
+        personal_phone: data.personal_phone || null,
+        address: data.address || null,
+        bank_name: data.bank_name || null,
+        bank_account: data.bank_account || null,
+        employment: data.employment
+      };
+    } else {
+      // Build from flat data (legacy support)
+      payload = {
+        code: data.code,
+        user_id: data.user_id || null,
+        full_name: data.full_name,
+        gender: data.gender || null,
+        dob: data.dob || null,
+        personal_email: data.personal_email || null,
+        personal_phone: data.personal_phone || null,
+        employment: {
+          department_id: data.department_id || null,
+          job_title_id: data.job_title_id || null,
+          start_date: data.start_date || null,
+          salary: data.salary || null,
+          work_location: data.work_location || null,
+          employment_type: data.employment_type || 'fulltime',
+          employment_status: data.employment_status || 'active',
+          report_to: data.report_to || null
+        }
+      };
+    }
+    
+    const response = await axiosClient.post('/employees', payload);
     return response.data;
   },
 
@@ -45,9 +69,17 @@ export const employeeService = {
     const employmentFields = ['department_id', 'job_title_id', 'start_date', 'end_date', 'salary', 
                               'work_location', 'employment_type', 'employment_status', 'report_to'];
     
-    const hasEmploymentFields = employmentFields.some(field => data[field] !== undefined);
-    
     let payload = { ...data };
+    
+    // Case 1: Data already has nested employment object - use it directly
+    if (data.employment && typeof data.employment === 'object') {
+      // Already properly structured, just forward it
+      const response = await axiosClient.patch(`/employees/${id}`, payload);
+      return response.data;
+    }
+    
+    // Case 2: Data has flat employment fields - build nested structure
+    const hasEmploymentFields = employmentFields.some(field => data[field] !== undefined);
     
     if (hasEmploymentFields) {
       const employment = {};

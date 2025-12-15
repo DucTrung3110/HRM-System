@@ -566,8 +566,10 @@ const openEditModal = (employee) => {
 };
 
 const openStatusModal = (employee) => {
-  statusTarget.value = employee;
-  newStatus.value = employee.employment_status || 'active';
+  // Find the current employee from the list to ensure we have the latest data
+  const currentEmployee = employees.value.find(e => e.id === employee.id) || employee;
+  statusTarget.value = { ...currentEmployee };
+  newStatus.value = currentEmployee.employment_status || 'active';
   terminationDate.value = '';
   terminationReason.value = '';
   showStatusModal.value = true;
@@ -593,6 +595,9 @@ const handleSubmit = async () => {
     saving.value = true;
     formError.value = '';
     
+    const deptIdParsed = form.value.department_id ? parseInt(form.value.department_id, 10) : null;
+    const jobIdParsed = form.value.job_title_id ? parseInt(form.value.job_title_id, 10) : null;
+    
     const payload = {
       code: form.value.employee_code,
       full_name: form.value.full_name,
@@ -604,13 +609,15 @@ const handleSubmit = async () => {
       bank_name: form.value.bank_name || null,
       bank_account: form.value.bank_account || null,
       employment: {
-        department_id: form.value.department_id ? parseInt(form.value.department_id) : null,
-        job_title_id: form.value.job_title_id ? parseInt(form.value.job_title_id) : null,
-        start_date: form.value.hire_date || null,
-        employment_status: form.value.employment_status,
-        employment_type: form.value.employment_type
+        department_id: isNaN(deptIdParsed) ? null : deptIdParsed,
+        job_title_id: isNaN(jobIdParsed) ? null : jobIdParsed,
+        start_date: form.value.hire_date || new Date().toISOString().split('T')[0],
+        employment_status: form.value.employment_status || 'active',
+        employment_type: form.value.employment_type || 'fulltime'
       }
     };
+
+    console.log('=== EMPLOYEE PAYLOAD ===', JSON.stringify(payload, null, 2));
 
     if (isEditing.value) {
       await employeeService.update(editingId.value, payload);
@@ -661,13 +668,27 @@ const handleStatusChange = async () => {
       employment.end_date = terminationDate.value;
     }
     
+    console.log('=== STATUS CHANGE PAYLOAD ===', JSON.stringify({ employment }, null, 2));
     await employeeService.update(statusTarget.value.id, { employment });
-    const index = employees.value.findIndex(e => e.id === statusTarget.value.id);
+    
+    // Update local state immediately for reactivity
+    const targetId = statusTarget.value.id;
+    const updatedStatus = newStatus.value;
+    const index = employees.value.findIndex(e => e.id === targetId);
     if (index !== -1) {
-      employees.value[index] = { ...employees.value[index], employment_status: newStatus.value };
+      // Create a new array to force Vue reactivity
+      const updatedEmployees = [...employees.value];
+      updatedEmployees[index] = { 
+        ...updatedEmployees[index], 
+        employment_status: updatedStatus 
+      };
+      employees.value = updatedEmployees;
     }
+    
     showStatusModal.value = false;
     statusTarget.value = null;
+    
+    // Reload from server to ensure consistency
     await loadEmployees();
   } catch (err) {
     console.error('Error updating status:', err);
