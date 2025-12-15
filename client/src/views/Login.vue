@@ -62,6 +62,8 @@ const password = ref('');
 const loading = ref(false);
 const error = ref('');
 
+const ADMIN_EMAIL = 'admin.nguyen@congty.vn';
+
 const handleLogin = async () => {
   loading.value = true;
   error.value = '';
@@ -78,16 +80,23 @@ const handleLogin = async () => {
     // Store auth data
     localStorage.setItem('auth_token', token);
     localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('user_email', email.value);
     
-    // Check if user has admin role
-    const isAdmin = user.roles?.includes('ADMIN') || user.roles?.includes('admin');
-    localStorage.setItem('role', JSON.stringify({ code: isAdmin ? 'ADMIN' : 'USER' }));
+    // Determine role based on email (RBAC)
+    const isAdmin = email.value === ADMIN_EMAIL;
+    const role = isAdmin ? 'admin' : 'employee';
+    localStorage.setItem('role', JSON.stringify({ code: role }));
+    localStorage.setItem('user_role', role);
 
     // Add welcome notification
     notificationStore.addSuccess(`Chào mừng ${user.name || 'bạn'} quay trở lại!`);
 
-    // Redirect to dashboard
-    router.push('/');
+    // Redirect based on role
+    if (isAdmin) {
+      router.push('/');
+    } else {
+      router.push('/attendance');
+    }
   } catch (err: any) {
     error.value = err.response?.data?.error || 'Đăng nhập thất bại';
     notificationStore.addError('Đăng nhập thất bại: ' + (err.response?.data?.error || 'Lỗi không xác định'));

@@ -2,8 +2,8 @@
   <div class="space-y-6">
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
       <div>
-        <h1 class="text-xl sm:text-2xl font-bold">Quản lý Nghỉ phép</h1>
-        <p class="text-muted-foreground mt-1">Quản lý đơn xin nghỉ phép của nhân viên</p>
+        <h1 class="text-xl sm:text-2xl font-bold">{{ isAdmin ? 'Quản lý Nghỉ phép' : 'Đơn nghỉ phép của tôi' }}</h1>
+        <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Quản lý đơn xin nghỉ phép của nhân viên' : 'Xem và tạo đơn xin nghỉ phép' }}</p>
       </div>
       <BaseButton
         @click="openCreateModal"
@@ -46,7 +46,7 @@
         <BaseCard>
           <div class="text-center">
             <p class="text-sm text-muted-foreground">Tổng đơn</p>
-            <p class="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">{{ requests.length }}</p>
+            <p class="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">{{ displayRequests.length }}</p>
           </div>
         </BaseCard>
       </div>
@@ -83,17 +83,17 @@
         </div>
       </BaseCard>
 
-      <BaseCard title="Danh sách yêu cầu">
+      <BaseCard :title="isAdmin ? 'Danh sách yêu cầu' : 'Đơn nghỉ phép của tôi'">
         <div v-if="filteredRequests.length === 0" class="text-center py-8 text-muted-foreground">
           Chưa có yêu cầu nghỉ phép nào
         </div>
         <BaseTable
           v-else
-          :columns="columns"
+          :columns="displayColumns"
           :data="filteredRequests"
           data-testid="table-leaves"
         >
-          <template #cell-employee="{ item }">
+          <template v-if="isAdmin" #cell-employee="{ item }">
             <div class="flex items-center gap-2">
               <div class="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
                 {{ getInitials(item.full_name || '') }}
@@ -125,7 +125,7 @@
 
           <template #actions="{ item }">
             <div class="flex items-center gap-2">
-              <template v-if="item.status === 'pending'">
+              <template v-if="isAdmin && item.status === 'pending'">
                 <button
                   @click="approveRequest(item)"
                   class="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-900 text-green-600 dark:text-green-400"
@@ -169,12 +169,20 @@
       data-testid="modal-create-leave"
     >
       <div class="space-y-4">
-        <BaseSelect
-          v-model="form.employee_id"
-          label="Nhân viên"
-          :options="employeeOptions"
-          required
-        />
+        <template v-if="isAdmin">
+          <BaseSelect
+            v-model="form.employee_id"
+            label="Nhân viên"
+            :options="employeeOptions"
+            required
+          />
+        </template>
+        <template v-else>
+          <div class="p-3 bg-muted rounded-lg">
+            <p class="text-sm text-muted-foreground">Nhân viên</p>
+            <p class="font-medium">{{ currentUser?.full_name || currentUser?.email || 'Bạn' }}</p>
+          </div>
+        </template>
         <BaseSelect
           v-model="form.leave_type_id"
           label="Loại nghỉ"
@@ -275,6 +283,10 @@ import BaseTable from '../components/BaseTable.vue';
 import BaseModal from '../components/BaseModal.vue';
 import { leaveService } from '../services/leaveService';
 import { employeeService } from '../services/employeeService';
+import { authService } from '../services/authService';
+
+const isAdmin = computed(() => authService.isAdmin());
+const currentUser = computed(() => authService.getUser());
 
 const loading = ref(true);
 const error = ref('');
@@ -304,13 +316,31 @@ const form = ref({
   reason: ''
 });
 
-const columns = [
+const adminColumns = [
   { key: 'employee', label: 'Nhân viên' },
   { key: 'leave_type', label: 'Loại nghỉ' },
   { key: 'dates', label: 'Thời gian' },
   { key: 'reason', label: 'Lý do' },
   { key: 'status', label: 'Trạng thái' },
 ];
+
+const employeeColumns = [
+  { key: 'leave_type', label: 'Loại nghỉ' },
+  { key: 'dates', label: 'Thời gian' },
+  { key: 'reason', label: 'Lý do' },
+  { key: 'status', label: 'Trạng thái' },
+];
+
+const displayColumns = computed(() => isAdmin.value ? adminColumns : employeeColumns);
+
+const displayRequests = computed(() => {
+  if (isAdmin.value) {
+    return requests.value;
+  }
+  const user = currentUser.value;
+  if (!user?.employee_id) return requests.value;
+  return requests.value.filter(r => String(r.employee_id) === String(user.employee_id));
+});
 
 const statusOptions = [
   { label: 'Tất cả', value: '' },
@@ -335,15 +365,16 @@ const employeeOptions = computed(() => {
 });
 
 const statusCounts = computed(() => {
+  const data = displayRequests.value;
   return {
-    pending: requests.value.filter(r => r.status === 'pending').length,
-    approved: requests.value.filter(r => r.status === 'approved').length,
-    rejected: requests.value.filter(r => r.status === 'rejected').length
+    pending: data.filter(r => r.status === 'pending').length,
+    approved: data.filter(r => r.status === 'approved').length,
+    rejected: data.filter(r => r.status === 'rejected').length
   };
 });
 
 const filteredRequests = computed(() => {
-  let result = [...requests.value];
+  let result = [...displayRequests.value];
   
   if (filters.value.status) {
     result = result.filter(r => r.status === filters.value.status);
@@ -398,8 +429,9 @@ const getLeaveTypeName = (id) => {
 };
 
 const resetForm = () => {
+  const user = currentUser.value;
   form.value = {
-    employee_id: '',
+    employee_id: isAdmin.value ? '' : (user?.employee_id ? String(user.employee_id) : ''),
     leave_type_id: '',
     start_date: '',
     end_date: '',
@@ -424,8 +456,10 @@ const viewDetail = (request) => {
 };
 
 const handleCreate = async () => {
-  if (!form.value.employee_id) {
-    formError.value = 'Vui lòng chọn nhân viên';
+  const employeeId = isAdmin.value ? form.value.employee_id : (currentUser.value?.employee_id ? String(currentUser.value.employee_id) : '');
+  
+  if (!employeeId) {
+    formError.value = 'Không thể xác định nhân viên. Vui lòng thử lại.';
     return;
   }
   if (!form.value.leave_type_id) {
@@ -447,7 +481,7 @@ const handleCreate = async () => {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     
     await leaveService.createRequest({
-      employee_id: parseInt(form.value.employee_id),
+      employee_id: parseInt(employeeId),
       leave_type_id: parseInt(form.value.leave_type_id),
       start_date: form.value.start_date,
       end_date: form.value.end_date,
@@ -468,7 +502,7 @@ const handleCreate = async () => {
 };
 
 const approveRequest = async (request) => {
-  if (processing.value) return;
+  if (processing.value || !isAdmin.value) return;
   
   try {
     processing.value = true;
@@ -484,7 +518,7 @@ const approveRequest = async (request) => {
 };
 
 const rejectRequest = async (request) => {
-  if (processing.value) return;
+  if (processing.value || !isAdmin.value) return;
   
   try {
     processing.value = true;
@@ -500,15 +534,24 @@ const rejectRequest = async (request) => {
 };
 
 const applyFilters = () => {
-  // Filters are applied reactively
 };
 
 const loadRequests = async () => {
   try {
-    const response = await leaveService.getRequests();
+    const params = {};
+    if (!isAdmin.value) {
+      const user = currentUser.value;
+      if (user?.employee_id) {
+        params.employee_id = user.employee_id;
+      }
+    }
+    const response = await leaveService.getRequests(params);
     requests.value = response?.data || response || [];
   } catch (err) {
     console.error('Error loading requests:', err);
+    if (err.response?.status === 403) {
+      requests.value = [];
+    }
   }
 };
 
@@ -517,19 +560,34 @@ onMounted(async () => {
     loading.value = true;
     error.value = '';
     
-    const [requestsRes, typesRes, employeesRes] = await Promise.all([
-      leaveService.getRequests(),
-      leaveService.getTypes().catch(() => []),
-      employeeService.getAll().catch(() => [])
-    ]);
+    const promises = [
+      leaveService.getRequests(!isAdmin.value && currentUser.value?.employee_id ? { employee_id: currentUser.value.employee_id } : {}).catch((err) => {
+        if (err.response?.status === 403) {
+          return [];
+        }
+        throw err;
+      }),
+      leaveService.getTypes().catch(() => [])
+    ];
     
-    requests.value = requestsRes?.data || requestsRes || [];
-    leaveTypes.value = typesRes?.data || typesRes || [];
-    employees.value = employeesRes?.data || employeesRes || [];
+    if (isAdmin.value) {
+      promises.push(employeeService.getAll().catch(() => []));
+    }
+    
+    const results = await Promise.all(promises);
+    
+    requests.value = results[0]?.data || results[0] || [];
+    leaveTypes.value = results[1]?.data || results[1] || [];
+    
+    if (isAdmin.value && results[2]) {
+      employees.value = results[2]?.data || results[2] || [];
+    }
     
   } catch (err) {
     console.error('Leaves API Error:', err);
-    error.value = err.response?.data?.error || err.message || 'Không thể kết nối đến API';
+    if (err.response?.status !== 403) {
+      error.value = err.response?.data?.error || err.message || 'Không thể kết nối đến API';
+    }
   } finally {
     loading.value = false;
   }

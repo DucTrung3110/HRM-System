@@ -2,42 +2,43 @@
   <div class="space-y-6">
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-foreground">Quản lý Chấm công</h1>
-        <p class="text-muted-foreground mt-1">Theo dõi và báo cáo chấm công nhân viên</p>
+        <h1 class="text-3xl font-bold text-foreground">{{ isAdmin ? 'Quản lý Chấm công' : 'Chấm công của tôi' }}</h1>
+        <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Theo dõi và báo cáo chấm công nhân viên' : 'Xem và quản lý chấm công cá nhân' }}</p>
       </div>
-      <BaseButton @click="openCheckInModal">
+      <BaseButton v-if="isAdmin" @click="openCheckInModal">
         + Chấm công
       </BaseButton>
     </div>
     
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-      <BaseCard>
-        <div class="text-center">
-          <p class="text-sm text-muted-foreground">Có mặt</p>
-          <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{{ todaySummary.present }}</p>
-        </div>
-      </BaseCard>
-      <BaseCard>
-        <div class="text-center">
-          <p class="text-sm text-muted-foreground">Vắng mặt</p>
-          <p class="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">{{ todaySummary.absent }}</p>
-        </div>
-      </BaseCard>
-      <BaseCard>
-        <div class="text-center">
-          <p class="text-sm text-muted-foreground">Đi muộn</p>
-          <p class="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-2">{{ todaySummary.late }}</p>
-        </div>
-      </BaseCard>
-      <BaseCard>
-        <div class="text-center">
-          <p class="text-sm text-muted-foreground">Nửa ngày</p>
-          <p class="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">{{ todaySummary.halfDay }}</p>
-        </div>
-      </BaseCard>
-    </div>
+    <template v-if="isAdmin">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <BaseCard>
+          <div class="text-center">
+            <p class="text-sm text-muted-foreground">Có mặt</p>
+            <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{{ todaySummary.present }}</p>
+          </div>
+        </BaseCard>
+        <BaseCard>
+          <div class="text-center">
+            <p class="text-sm text-muted-foreground">Vắng mặt</p>
+            <p class="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">{{ todaySummary.absent }}</p>
+          </div>
+        </BaseCard>
+        <BaseCard>
+          <div class="text-center">
+            <p class="text-sm text-muted-foreground">Đi muộn</p>
+            <p class="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-2">{{ todaySummary.late }}</p>
+          </div>
+        </BaseCard>
+        <BaseCard>
+          <div class="text-center">
+            <p class="text-sm text-muted-foreground">Nửa ngày</p>
+            <p class="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">{{ todaySummary.halfDay }}</p>
+          </div>
+        </BaseCard>
+      </div>
+    </template>
     
-    <!-- Time Clock Card - Prominent Check-in/Check-out -->
     <BaseCard class="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
       <div class="flex flex-col md:flex-row items-center justify-between gap-6">
         <div class="flex items-center gap-4">
@@ -54,20 +55,21 @@
         </div>
         
         <div class="flex flex-col items-center gap-3">
-          <BaseSelect
-            v-if="employees.length > 0"
-            v-model="clockEmployeeId"
-            :options="employeeOptions.filter(o => o.value)"
-            class="w-64"
-            placeholder="Chọn nhân viên"
-          />
+          <template v-if="isAdmin">
+            <BaseSelect
+              v-if="employees.length > 0"
+              v-model="clockEmployeeId"
+              :options="employeeOptions.filter(o => o.value)"
+              class="w-64"
+              placeholder="Chọn nhân viên"
+            />
+          </template>
           
           <div v-if="clockEmployeeId">
             <div v-if="clockLoading" class="text-muted-foreground">
               Đang kiểm tra...
             </div>
             <div v-else-if="todayRecord === null">
-              <!-- Not checked in yet -->
               <BaseButton 
                 @click="handleQuickCheckIn" 
                 :disabled="clockProcessing"
@@ -80,7 +82,6 @@
               </BaseButton>
             </div>
             <div v-else-if="todayRecord && !todayRecord.check_out_time">
-              <!-- Checked in but not out -->
               <div class="text-center mb-2">
                 <span class="text-sm text-muted-foreground">Đã vào lúc: </span>
                 <span class="font-mono font-bold text-green-600">{{ formatTime(todayRecord.check_in_time) }}</span>
@@ -97,7 +98,6 @@
               </BaseButton>
             </div>
             <div v-else>
-              <!-- Completed for today -->
               <div class="text-center p-4 bg-green-100 dark:bg-green-900/30 rounded-lg">
                 <svg class="w-8 h-8 text-green-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -109,58 +109,61 @@
               </div>
             </div>
           </div>
-          <p v-else class="text-sm text-muted-foreground">Chọn nhân viên để chấm công</p>
+          <p v-else-if="isAdmin" class="text-sm text-muted-foreground">Chọn nhân viên để chấm công</p>
+          <p v-else class="text-sm text-muted-foreground">Đang tải thông tin...</p>
         </div>
       </div>
     </BaseCard>
     
-    <BaseCard>
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <BaseInput
-          v-model="filters.startDate"
-          type="date"
-          label="Từ ngày"
-        />
-        <BaseInput
-          v-model="filters.endDate"
-          type="date"
-          label="Đến ngày"
-        />
-        <BaseSelect
-          v-model="filters.employee_id"
-          label="Nhân viên"
-          :options="employeeOptions"
-          placeholder="Tất cả"
-        />
-        <BaseSelect
-          v-model="filters.status"
-          label="Trạng thái"
-          :options="statusOptions"
-        />
-        <div class="flex items-end">
-          <BaseButton
-            variant="outline"
-            @click="applyFilters"
-          >
-            Áp dụng
-          </BaseButton>
+    <template v-if="isAdmin">
+      <BaseCard>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <BaseInput
+            v-model="filters.startDate"
+            type="date"
+            label="Từ ngày"
+          />
+          <BaseInput
+            v-model="filters.endDate"
+            type="date"
+            label="Đến ngày"
+          />
+          <BaseSelect
+            v-model="filters.employee_id"
+            label="Nhân viên"
+            :options="employeeOptions"
+            placeholder="Tất cả"
+          />
+          <BaseSelect
+            v-model="filters.status"
+            label="Trạng thái"
+            :options="statusOptions"
+          />
+          <div class="flex items-end">
+            <BaseButton
+              variant="outline"
+              @click="applyFilters"
+            >
+              Áp dụng
+            </BaseButton>
+          </div>
         </div>
-      </div>
-    </BaseCard>
+      </BaseCard>
+    </template>
     
-    <BaseCard title="Bảng chấm công">
+    <BaseCard :title="isAdmin ? 'Bảng chấm công' : 'Lịch sử chấm công của tôi'">
       <div v-if="loading" class="text-center py-8">
         <p class="text-muted-foreground">Đang tải dữ liệu...</p>
       </div>
-      <div v-else-if="records.length === 0" class="text-center py-8 text-muted-foreground">
+      <div v-else-if="displayRecords.length === 0" class="text-center py-8 text-muted-foreground">
         Chưa có dữ liệu chấm công
       </div>
       <BaseTable
         v-else
-        :columns="columns"
-        :data="records"
+        :columns="displayColumns"
+        :data="displayRecords"
       >
-        <template #cell-employee="{ item }">
+        <template v-if="isAdmin" #cell-employee="{ item }">
           <div class="flex items-center gap-2">
             <div class="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
               {{ getInitials(item.full_name) }}
@@ -194,7 +197,7 @@
           </BaseBadge>
         </template>
 
-        <template #actions="{ item }">
+        <template v-if="isAdmin" #actions="{ item }">
           <div class="flex items-center gap-2">
             <button
               v-if="!item.check_out_time && item.check_in_time"
@@ -318,9 +321,13 @@ import BaseTable from '../components/BaseTable.vue';
 import BaseModal from '../components/BaseModal.vue';
 import { attendanceService } from '../services/attendanceService';
 import { employeeService } from '../services/employeeService';
+import { authService } from '../services/authService';
 import { useToast } from '../composables/useToast';
 
 const toast = useToast();
+
+const isAdmin = computed(() => authService.isAdmin());
+const currentUser = computed(() => authService.getUser());
 
 const loading = ref(true);
 const saving = ref(false);
@@ -437,7 +444,7 @@ const editForm = ref({
   notes: ''
 });
 
-const columns = [
+const adminColumns = [
   { key: 'employee', label: 'Nhân viên' },
   { key: 'record_date', label: 'Ngày' },
   { key: 'check_in_time', label: 'Giờ vào' },
@@ -445,6 +452,25 @@ const columns = [
   { key: 'total_work_hours', label: 'Tổng giờ' },
   { key: 'status', label: 'Trạng thái' },
 ];
+
+const employeeColumns = [
+  { key: 'record_date', label: 'Ngày' },
+  { key: 'check_in_time', label: 'Giờ vào' },
+  { key: 'check_out_time', label: 'Giờ ra' },
+  { key: 'total_work_hours', label: 'Tổng giờ' },
+  { key: 'status', label: 'Trạng thái' },
+];
+
+const displayColumns = computed(() => isAdmin.value ? adminColumns : employeeColumns);
+
+const displayRecords = computed(() => {
+  if (isAdmin.value) {
+    return records.value;
+  }
+  const user = currentUser.value;
+  if (!user?.employee_id) return records.value;
+  return records.value.filter(r => String(r.employee_id) === String(user.employee_id));
+});
 
 const statusOptions = [
   { label: 'Tất cả', value: '' },
@@ -607,20 +633,29 @@ const loadData = async () => {
     if (filters.value.employee_id) params.employee_id = filters.value.employee_id;
     if (filters.value.status) params.status = filters.value.status;
     
+    if (!isAdmin.value) {
+      const user = currentUser.value;
+      if (user?.employee_id) {
+        params.employee_id = user.employee_id;
+      }
+    }
+    
     const response = await attendanceService.getRecords(params);
     records.value = response || [];
     
-    const today = new Date().toISOString().split('T')[0];
-    const todayRecords = records.value.filter(r => {
-      return r.record_date === today;
-    });
-    
-    todaySummary.value = {
-      present: todayRecords.filter(r => r.status === 'present').length,
-      absent: todayRecords.filter(r => r.status === 'absent').length,
-      late: todayRecords.filter(r => r.status === 'late').length,
-      halfDay: todayRecords.filter(r => r.status === 'half_day').length
-    };
+    if (isAdmin.value) {
+      const today = new Date().toISOString().split('T')[0];
+      const todayRecords = records.value.filter(r => {
+        return r.record_date === today;
+      });
+      
+      todaySummary.value = {
+        present: todayRecords.filter(r => r.status === 'present').length,
+        absent: todayRecords.filter(r => r.status === 'absent').length,
+        late: todayRecords.filter(r => r.status === 'late').length,
+        halfDay: todayRecords.filter(r => r.status === 'half_day').length
+      };
+    }
   } catch (err) {
     console.error('Error loading attendance:', err);
     records.value = [];
@@ -640,12 +675,20 @@ onMounted(async () => {
     filters.value.startDate = firstDayOfMonth.toISOString().split('T')[0];
     filters.value.endDate = today.toISOString().split('T')[0];
     
-    const [_, employeesRes] = await Promise.all([
-      loadData(),
-      employeeService.getAll().catch(() => [])
-    ]);
-    
-    employees.value = employeesRes?.data || employeesRes || [];
+    if (isAdmin.value) {
+      const [_, employeesRes] = await Promise.all([
+        loadData(),
+        employeeService.getAll().catch(() => [])
+      ]);
+      
+      employees.value = employeesRes?.data || employeesRes || [];
+    } else {
+      await loadData();
+      const user = currentUser.value;
+      if (user?.employee_id) {
+        clockEmployeeId.value = String(user.employee_id);
+      }
+    }
   } catch (err) {
     console.error('Error initializing:', err);
   }

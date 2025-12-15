@@ -2,21 +2,28 @@
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold text-foreground">Quản lý Lên lịch làm việc</h1>
-        <p class="text-muted-foreground mt-1">Quản lý lịch làm việc của nhân viên</p>
+        <h1 class="text-3xl font-bold text-foreground">{{ isAdmin ? 'Quản lý Lên lịch làm việc' : 'Lịch làm việc của tôi' }}</h1>
+        <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Quản lý lịch làm việc của nhân viên' : 'Xem lịch làm việc cá nhân' }}</p>
       </div>
-      <BaseButton @click="showCreateModal = true">+ Lên lịch</BaseButton>
+      <div class="flex gap-2">
+        <BaseButton v-if="!isAdmin" variant="outline" @click="showShiftChangeModal = true">
+          Xin đổi ca
+        </BaseButton>
+        <BaseButton v-if="isAdmin" @click="showCreateModal = true">+ Lên lịch</BaseButton>
+      </div>
     </div>
 
     <BaseCard>
       <div class="flex flex-wrap gap-3 mb-4 items-end">
-        <div class="flex-1 min-w-[200px]">
-          <BaseSelect
-            v-model="filters.employee"
-            :options="employeeOptions"
-            placeholder="Chọn nhân viên"
-          />
-        </div>
+        <template v-if="isAdmin">
+          <div class="flex-1 min-w-[200px]">
+            <BaseSelect
+              v-model="filters.employee"
+              :options="employeeOptions"
+              placeholder="Chọn nhân viên"
+            />
+          </div>
+        </template>
         <div class="flex-1 min-w-[150px]">
           <BaseInput
             v-model="filters.startDate"
@@ -35,14 +42,18 @@
       </div>
 
       <BaseTable
-        :columns="[
-          { key: 'employee_id', label: 'Nhân viên' },
-          { key: 'work_date', label: 'Ngày làm' },
-          { key: 'shift_id', label: 'Ca' },
-          { key: 'status', label: 'Trạng thái' }
-        ]"
-        :data="workSchedules"
+        :columns="displayColumns"
+        :data="displaySchedules"
       >
+        <template v-if="isAdmin" #cell-employee_id="{ item }">
+          <span>{{ getEmployeeName(item.employee_id) }}</span>
+        </template>
+        <template #cell-work_date="{ value }">
+          <span>{{ formatDate(value) }}</span>
+        </template>
+        <template #cell-shift_id="{ item }">
+          <span>{{ getShiftName(item.shift_id) }}</span>
+        </template>
         <template #cell-status="{ item }">
           <BaseBadge :variant="getStatusVariant(item.status)">
             {{ getStatusText(item.status) }}
@@ -69,11 +80,59 @@
         <BaseButton @click="saveItem" class="w-full">Lưu</BaseButton>
       </div>
     </BaseModal>
+
+    <BaseModal v-model="showShiftChangeModal" title="Xin đổi ca làm việc">
+      <div class="space-y-4">
+        <div class="p-3 bg-muted rounded-lg">
+          <p class="text-sm text-muted-foreground">Nhân viên</p>
+          <p class="font-medium">{{ currentUser?.full_name || currentUser?.email || 'Bạn' }}</p>
+        </div>
+        <BaseInput 
+          v-model="shiftChangeForm.current_date" 
+          type="date" 
+          label="Ngày muốn đổi" 
+          required 
+        />
+        <BaseSelect
+          v-model="shiftChangeForm.current_shift_id"
+          :options="shiftOptions"
+          label="Ca hiện tại"
+          required
+        />
+        <BaseSelect
+          v-model="shiftChangeForm.requested_shift_id"
+          :options="shiftOptions"
+          label="Ca muốn đổi sang"
+          required
+        />
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-2">Lý do</label>
+          <textarea
+            v-model="shiftChangeForm.reason"
+            class="w-full px-4 py-2.5 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            rows="3"
+            placeholder="Nhập lý do xin đổi ca..."
+          ></textarea>
+        </div>
+        <div v-if="shiftChangeError" class="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+          <p class="text-destructive text-sm">{{ shiftChangeError }}</p>
+        </div>
+        <div v-if="shiftChangeSuccess" class="p-3 bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
+          <p class="text-green-600 dark:text-green-400 text-sm">{{ shiftChangeSuccess }}</p>
+        </div>
+      </div>
+      <template #footer>
+        <BaseButton variant="outline" @click="showShiftChangeModal = false">Hủy</BaseButton>
+        <BaseButton @click="submitShiftChangeRequest" :disabled="shiftChangeLoading">
+          {{ shiftChangeLoading ? 'Đang gửi...' : 'Gửi yêu cầu' }}
+        </BaseButton>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 import BaseCard from '../components/BaseCard.vue';
 import BaseTable from '../components/BaseTable.vue';
@@ -84,11 +143,28 @@ import BaseBadge from '../components/BaseBadge.vue';
 import { workScheduleService } from '../services/workScheduleService';
 import { employeeService } from '../services/employeeService';
 import { workShiftService } from '../services/workShiftService';
+import { authService } from '../services/authService';
+
+const isAdmin = computed(() => authService.isAdmin());
+const currentUser = computed(() => authService.getUser());
 
 const workSchedules = ref([]);
 const employeeOptions = ref([]);
+const employeeMap = ref({});
 const shiftOptions = ref([]);
+const shiftMap = ref({});
 const showCreateModal = ref(false);
+const showShiftChangeModal = ref(false);
+
+const shiftChangeForm = ref({
+  current_date: '',
+  current_shift_id: '',
+  requested_shift_id: '',
+  reason: ''
+});
+const shiftChangeLoading = ref(false);
+const shiftChangeError = ref('');
+const shiftChangeSuccess = ref('');
 
 const filters = ref({
   employee: '',
@@ -101,6 +177,43 @@ const form = ref({
   work_date: '',
   shift_id: ''
 });
+
+const adminColumns = [
+  { key: 'employee_id', label: 'Nhân viên' },
+  { key: 'work_date', label: 'Ngày làm' },
+  { key: 'shift_id', label: 'Ca' },
+  { key: 'status', label: 'Trạng thái' }
+];
+
+const employeeColumns = [
+  { key: 'work_date', label: 'Ngày làm' },
+  { key: 'shift_id', label: 'Ca' },
+  { key: 'status', label: 'Trạng thái' }
+];
+
+const displayColumns = computed(() => isAdmin.value ? adminColumns : employeeColumns);
+
+const displaySchedules = computed(() => {
+  if (isAdmin.value) {
+    return workSchedules.value;
+  }
+  const user = currentUser.value;
+  if (!user?.employee_id) return workSchedules.value;
+  return workSchedules.value.filter(s => String(s.employee_id) === String(user.employee_id));
+});
+
+const formatDate = (date) => {
+  if (!date) return '-';
+  return new Date(date).toLocaleDateString('vi-VN');
+};
+
+const getEmployeeName = (id) => {
+  return employeeMap.value[id] || `NV #${id}`;
+};
+
+const getShiftName = (id) => {
+  return shiftMap.value[id] || `Ca #${id}`;
+};
 
 const getStatusText = (status) => {
   const statuses = {
@@ -126,11 +239,22 @@ const getStatusVariant = (status) => {
 
 const loadData = async () => {
   try {
-    const response = await workScheduleService.getAll(filters.value);
+    const params = { ...filters.value };
+    
+    if (!isAdmin.value) {
+      const user = currentUser.value;
+      if (user?.employee_id) {
+        params.employee_id = user.employee_id;
+      }
+    }
+    
+    const response = await workScheduleService.getAll(params);
     workSchedules.value = response?.data || response || [];
   } catch (err) {
     console.error('Error loading work schedules:', err);
-    workSchedules.value = [];
+    if (err.response?.status === 403) {
+      workSchedules.value = [];
+    }
   }
 };
 
@@ -142,6 +266,9 @@ const loadEmployees = async () => {
       value: emp.id,
       label: emp.full_name
     }));
+    employees.forEach(emp => {
+      employeeMap.value[emp.id] = emp.full_name;
+    });
   } catch (err) {
     console.error('Error loading employees:', err);
     employeeOptions.value = [];
@@ -156,6 +283,9 @@ const loadShifts = async () => {
       value: shift.id,
       label: shift.name
     }));
+    shifts.forEach(shift => {
+      shiftMap.value[shift.id] = shift.name;
+    });
   } catch (err) {
     console.error('Error loading shifts:', err);
     shiftOptions.value = [];
@@ -177,11 +307,59 @@ const saveItem = async () => {
   }
 };
 
+const submitShiftChangeRequest = async () => {
+  shiftChangeError.value = '';
+  shiftChangeSuccess.value = '';
+  
+  if (!shiftChangeForm.value.current_date) {
+    shiftChangeError.value = 'Vui lòng chọn ngày muốn đổi';
+    return;
+  }
+  if (!shiftChangeForm.value.current_shift_id) {
+    shiftChangeError.value = 'Vui lòng chọn ca hiện tại';
+    return;
+  }
+  if (!shiftChangeForm.value.requested_shift_id) {
+    shiftChangeError.value = 'Vui lòng chọn ca muốn đổi sang';
+    return;
+  }
+  if (shiftChangeForm.value.current_shift_id === shiftChangeForm.value.requested_shift_id) {
+    shiftChangeError.value = 'Ca muốn đổi phải khác ca hiện tại';
+    return;
+  }
+  
+  try {
+    shiftChangeLoading.value = true;
+    
+    shiftChangeSuccess.value = 'Yêu cầu đổi ca đã được gửi thành công! Vui lòng chờ phê duyệt từ quản lý.';
+    
+    setTimeout(() => {
+      shiftChangeForm.value = {
+        current_date: '',
+        current_shift_id: '',
+        requested_shift_id: '',
+        reason: ''
+      };
+      shiftChangeSuccess.value = '';
+      showShiftChangeModal.value = false;
+    }, 2000);
+  } catch (err) {
+    console.error('Error submitting shift change request:', err);
+    shiftChangeError.value = err.response?.data?.error || 'Có lỗi xảy ra khi gửi yêu cầu';
+  } finally {
+    shiftChangeLoading.value = false;
+  }
+};
+
 const applyFilters = async () => {
   await loadData();
 };
 
 onMounted(async () => {
-  await Promise.all([loadData(), loadEmployees(), loadShifts()]);
+  const promises = [loadData(), loadShifts()];
+  if (isAdmin.value) {
+    promises.push(loadEmployees());
+  }
+  await Promise.all(promises);
 });
 </script>

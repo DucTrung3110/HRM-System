@@ -221,6 +221,8 @@ const notificationStore = useNotificationStore();
 const storeNotifications = notificationStore.notifications;
 const storeUnreadCount = notificationStore.unreadCount;
 
+const isAdmin = computed(() => authService.isAdmin());
+
 const notifications = computed(() => {
   return storeNotifications.value.map(n => ({
     id: n.id,
@@ -254,27 +256,34 @@ const handleLogout = () => {
   }
 };
 
-const navItems = [
-  { path: '/', name: 'dashboard', label: 'Dashboard', icon: IconDashboard },
-  { path: '/employees', name: 'employees', label: 'Nhân viên', icon: IconUser },
-  { path: '/departments', name: 'departments', label: 'Phòng ban', icon: IconBuilding },
-  { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock },
-  { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar },
-  { path: '/salaries', name: 'salaries', label: 'Lương', icon: IconCash },
-  { path: '/roles', name: 'roles', label: 'Vai trò', icon: IconShield },
-  { path: '/job-titles', name: 'job-titles', label: 'Chức danh', icon: IconUser },
-  { path: '/job-families', name: 'job-families', label: 'Nhóm chức danh', icon: IconBuilding },
-  { path: '/employment-history', name: 'employment-history', label: 'Lịch sử công tác', icon: IconUser },
-  { path: '/work-shifts', name: 'work-shifts', label: 'Ca làm việc', icon: IconClock },
-  { path: '/work-schedules', name: 'work-schedules', label: 'Lên lịch', icon: IconCalendar },
-  { path: '/salary-components', name: 'salary-components', label: 'Thành phần lương', icon: IconCash },
-  { path: '/portal', name: 'portal', label: 'Cổng nhân viên', icon: IconUser },
+const allNavItems = [
+  { path: '/', name: 'dashboard', label: 'Dashboard', icon: IconDashboard, adminOnly: true },
+  { path: '/employees', name: 'employees', label: 'Nhân viên', icon: IconUser, adminOnly: true },
+  { path: '/departments', name: 'departments', label: 'Phòng ban', icon: IconBuilding, adminOnly: true },
+  { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: false },
+  { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: false },
+  { path: '/salaries', name: 'salaries', label: 'Lương', icon: IconCash, adminOnly: false },
+  { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: false },
+  { path: '/roles', name: 'roles', label: 'Vai trò', icon: IconShield, adminOnly: true },
+  { path: '/job-titles', name: 'job-titles', label: 'Chức danh', icon: IconUser, adminOnly: true },
+  { path: '/job-families', name: 'job-families', label: 'Nhóm chức danh', icon: IconBuilding, adminOnly: true },
+  { path: '/employment-history', name: 'employment-history', label: 'Lịch sử công tác', icon: IconUser, adminOnly: true },
+  { path: '/work-shifts', name: 'work-shifts', label: 'Ca làm việc', icon: IconClock, adminOnly: true },
+  { path: '/salary-components', name: 'salary-components', label: 'Thành phần lương', icon: IconCash, adminOnly: true },
+  { path: '/portal', name: 'portal', label: 'Cổng nhân viên', icon: IconUser, adminOnly: true },
 ];
+
+const navItems = computed(() => {
+  if (isAdmin.value) {
+    return allNavItems;
+  }
+  return allNavItems.filter(item => !item.adminOnly);
+});
 
 const filteredNavItems = computed(() => {
   const query = searchQuery.value.toLowerCase().trim();
-  if (!query) return navItems;
-  return navItems.filter(item => 
+  if (!query) return navItems.value;
+  return navItems.value.filter(item => 
     item.label.toLowerCase().includes(query) || 
     item.name.toLowerCase().includes(query) ||
     item.path.toLowerCase().includes(query)
@@ -282,7 +291,7 @@ const filteredNavItems = computed(() => {
 });
 
 const currentPageTitle = computed(() => {
-  const item = navItems.find(i => i.path === route.path);
+  const item = navItems.value.find(i => i.path === route.path);
   return item?.label || route.meta.title || 'Dashboard';
 });
 

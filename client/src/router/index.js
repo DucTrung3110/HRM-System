@@ -1,5 +1,16 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
+const ADMIN_ONLY_ROUTES = [
+  '/employees',
+  '/departments',
+  '/roles',
+  '/job-titles',
+  '/job-families',
+  '/employment-history',
+  '/salary-components',
+  '/portal'
+];
+
 const routes = [
   {
     path: '/',
@@ -10,91 +21,91 @@ const routes = [
         path: '',
         name: 'dashboard',
         component: () => import('../views/Dashboard.vue'),
-        meta: { title: 'Dashboard', requiresAuth: true }
+        meta: { title: 'Dashboard', requiresAuth: true, adminOnly: true }
       },
       {
         path: 'employees',
         name: 'employees',
         component: () => import('../views/Employees.vue'),
-        meta: { title: 'Quản lý Nhân viên' }
+        meta: { title: 'Quản lý Nhân viên', adminOnly: true }
       },
       {
         path: 'employees/:id',
         name: 'employee-detail',
         component: () => import('../views/EmployeeDetail.vue'),
-        meta: { title: 'Chi tiết Nhân viên' }
+        meta: { title: 'Chi tiết Nhân viên', adminOnly: true }
       },
       {
         path: 'departments',
         name: 'departments',
         component: () => import('../views/Departments.vue'),
-        meta: { title: 'Quản lý Phòng ban' }
+        meta: { title: 'Quản lý Phòng ban', adminOnly: true }
       },
       {
         path: 'attendance',
         name: 'attendance',
         component: () => import('../views/Attendance.vue'),
-        meta: { title: 'Quản lý Chấm công' }
+        meta: { title: 'Chấm công' }
       },
       {
         path: 'leaves',
         name: 'leaves',
         component: () => import('../views/Leaves.vue'),
-        meta: { title: 'Quản lý Nghỉ phép' }
+        meta: { title: 'Nghỉ phép' }
       },
       {
         path: 'salaries',
         name: 'salaries',
         component: () => import('../views/Salaries.vue'),
-        meta: { title: 'Quản lý Lương' }
+        meta: { title: 'Lương' }
       },
       {
         path: 'roles',
         name: 'roles',
         component: () => import('../views/Roles.vue'),
-        meta: { title: 'Vai trò & Phân quyền' }
+        meta: { title: 'Vai trò & Phân quyền', adminOnly: true }
       },
       {
         path: 'job-titles',
         name: 'job-titles',
         component: () => import('../views/JobTitles.vue'),
-        meta: { title: 'Quản lý Chức danh' }
+        meta: { title: 'Quản lý Chức danh', adminOnly: true }
       },
       {
         path: 'job-families',
         name: 'job-families',
         component: () => import('../views/JobFamilies.vue'),
-        meta: { title: 'Quản lý Nhóm chức danh' }
+        meta: { title: 'Quản lý Nhóm chức danh', adminOnly: true }
       },
       {
         path: 'employment-history',
         name: 'employment-history',
         component: () => import('../views/EmploymentHistory.vue'),
-        meta: { title: 'Quản lý Lịch sử công tác' }
+        meta: { title: 'Quản lý Lịch sử công tác', adminOnly: true }
       },
       {
         path: 'work-shifts',
         name: 'work-shifts',
         component: () => import('../views/WorkShifts.vue'),
-        meta: { title: 'Quản lý Ca làm việc' }
+        meta: { title: 'Ca làm việc', adminOnly: true }
       },
       {
         path: 'work-schedules',
         name: 'work-schedules',
         component: () => import('../views/WorkSchedules.vue'),
-        meta: { title: 'Quản lý Lên lịch làm việc' }
+        meta: { title: 'Lịch làm việc' }
       },
       {
         path: 'salary-components',
         name: 'salary-components',
         component: () => import('../views/SalaryComponents.vue'),
-        meta: { title: 'Quản lý Thành phần lương' }
+        meta: { title: 'Quản lý Thành phần lương', adminOnly: true }
       },
       {
         path: 'portal',
         name: 'portal',
         component: () => import('../views/EmployeePortal.vue'),
-        meta: { title: 'Cổng Nhân viên' }
+        meta: { title: 'Cổng Nhân viên', adminOnly: true }
       }
     ]
   },
@@ -120,24 +131,26 @@ router.beforeEach((to, from, next) => {
   try {
     const token = localStorage.getItem('auth_token');
     const isAuthenticated = !!token;
-    
-    let role = {};
-    try {
-      role = JSON.parse(localStorage.getItem('role') || '{}');
-    } catch (e) {
-      role = {};
-    }
+    const userRole = localStorage.getItem('user_role') || 'employee';
+    const isAdmin = userRole === 'admin';
 
     if (to.meta.requiresAuth && !isAuthenticated) {
       next('/login');
-    } else if (to.path === '/login' && isAuthenticated) {
-      next('/');
-    } else if (to.meta.role && role.code !== to.meta.role) {
-      next('/employee/info');
-    } else {
-      document.title = `${to.meta.title || 'HRM'} | Hệ thống Quản lý Nhân sự`;
-      next();
+      return;
     }
+    
+    if (to.path === '/login' && isAuthenticated) {
+      next(isAdmin ? '/' : '/attendance');
+      return;
+    }
+    
+    if (to.meta.adminOnly && !isAdmin) {
+      next('/attendance');
+      return;
+    }
+
+    document.title = `${to.meta.title || 'HRM'} | Hệ thống Quản lý Nhân sự`;
+    next();
   } catch (error) {
     console.error('Router guard error:', error);
     next('/login');
