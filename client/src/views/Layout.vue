@@ -69,28 +69,105 @@
         </div>
 
         <div class="flex items-center gap-2 sm:gap-4">
-          <!-- Search -->
-          <div class="relative hidden md:block">
+          <!-- Search with Dropdown -->
+          <div class="relative hidden md:block" ref="searchContainerRef">
             <input
+              v-model="searchQuery"
               type="search"
-              placeholder="Tìm kiếm..."
+              placeholder="Tìm kiếm trang..."
               class="w-64 px-4 py-2 pl-10 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               data-testid="input-global-search"
+              @focus="isSearchFocused = true"
+              @keydown.enter="handleSearchEnter"
+              @keydown.down.prevent="navigateSearchResults(1)"
+              @keydown.up.prevent="navigateSearchResults(-1)"
+              @keydown.escape="closeSearch"
             />
             <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
+            
+            <!-- Search Results Dropdown -->
+            <div 
+              v-if="isSearchFocused && (searchQuery.trim() || filteredNavItems.length > 0)"
+              class="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto z-50"
+            >
+              <div v-if="filteredNavItems.length === 0 && searchQuery.trim()" class="p-3 text-muted-foreground text-sm text-center">
+                Không tìm thấy trang nào
+              </div>
+              <div v-else class="py-1">
+                <div
+                  v-for="(item, index) in filteredNavItems"
+                  :key="item.path"
+                  @click="navigateToPage(item)"
+                  :class="[
+                    'flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors',
+                    selectedSearchIndex === index ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                  ]"
+                >
+                  <component :is="item.icon" class="w-4 h-4" />
+                  <span class="text-sm">{{ item.label }}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <ThemeToggle />
 
           <!-- Notifications -->
-          <button class="relative p-2 rounded-lg hover-elevate active-elevate-2" data-testid="button-notifications">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            <span class="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full"></span>
-          </button>
+          <div class="relative" ref="notificationContainerRef">
+            <button 
+              @click="toggleNotifications"
+              class="relative p-2 rounded-lg hover-elevate active-elevate-2" 
+              data-testid="button-notifications"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span v-if="unreadCount > 0" class="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground text-xs rounded-full flex items-center justify-center font-medium">
+                {{ unreadCount }}
+              </span>
+            </button>
+            
+            <!-- Notifications Dropdown -->
+            <div 
+              v-if="isNotificationsOpen"
+              class="absolute top-full right-0 mt-2 w-80 bg-background border border-border rounded-lg shadow-lg z-50"
+            >
+              <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h3 class="font-semibold text-sm">Thông báo</h3>
+                <button 
+                  @click="markAllAsRead"
+                  class="text-xs text-primary hover:underline"
+                >
+                  Đánh dấu đã đọc
+                </button>
+              </div>
+              <div class="max-h-64 overflow-y-auto">
+                <div 
+                  v-for="notification in notifications" 
+                  :key="notification.id"
+                  :class="[
+                    'flex items-start gap-3 px-4 py-3 border-b border-border last:border-b-0 cursor-pointer hover:bg-muted/50 transition-colors',
+                    !notification.read ? 'bg-primary/5' : ''
+                  ]"
+                  @click="markAsRead(notification.id)"
+                >
+                  <div :class="[
+                    'w-2 h-2 rounded-full mt-2 flex-shrink-0',
+                    notification.read ? 'bg-muted-foreground/30' : 'bg-primary'
+                  ]"></div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm">{{ notification.message }}</p>
+                    <p class="text-xs text-muted-foreground mt-1">{{ notification.time }}</p>
+                  </div>
+                </div>
+              </div>
+              <div v-if="notifications.length === 0" class="p-4 text-center text-muted-foreground text-sm">
+                Không có thông báo mới
+              </div>
+            </div>
+          </div>
 
           <!-- Logout -->
           <button 
@@ -115,7 +192,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { authService } from '../services/authService';
 import ThemeToggle from '../components/ThemeToggle.vue';
@@ -130,6 +207,23 @@ import IconShield from '../components/IconShield.vue';
 const route = useRoute();
 const router = useRouter();
 const isMobileMenuOpen = ref(false);
+
+const searchQuery = ref('');
+const isSearchFocused = ref(false);
+const selectedSearchIndex = ref(0);
+const searchContainerRef = ref(null);
+
+const isNotificationsOpen = ref(false);
+const notificationContainerRef = ref(null);
+const notifications = ref([
+  { id: 1, message: 'Chào mừng bạn đến hệ thống', time: 'Vừa xong', read: false },
+  { id: 2, message: 'Cập nhật hồ sơ thành công', time: '5 phút trước', read: false },
+  { id: 3, message: 'Có 3 đơn nghỉ phép chờ duyệt', time: '1 giờ trước', read: false },
+  { id: 4, message: 'Đã thêm nhân viên mới vào hệ thống', time: '2 giờ trước', read: true },
+  { id: 5, message: 'Bảng lương tháng 12 đã sẵn sàng', time: 'Hôm qua', read: true }
+]);
+
+const unreadCount = computed(() => notifications.value.filter(n => !n.read).length);
 
 const handleLogout = () => {
   if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
@@ -155,6 +249,16 @@ const navItems = [
   { path: '/portal', name: 'portal', label: 'Cổng nhân viên', icon: IconUser },
 ];
 
+const filteredNavItems = computed(() => {
+  const query = searchQuery.value.toLowerCase().trim();
+  if (!query) return navItems;
+  return navItems.filter(item => 
+    item.label.toLowerCase().includes(query) || 
+    item.name.toLowerCase().includes(query) ||
+    item.path.toLowerCase().includes(query)
+  );
+});
+
 const currentPageTitle = computed(() => {
   const item = navItems.find(i => i.path === route.path);
   return item?.label || route.meta.title || 'Dashboard';
@@ -164,4 +268,61 @@ const isActive = (path) => {
   if (path === '/') return route.path === '/';
   return route.path.startsWith(path);
 };
+
+const navigateToPage = (item) => {
+  router.push(item.path);
+  searchQuery.value = '';
+  isSearchFocused.value = false;
+  selectedSearchIndex.value = 0;
+};
+
+const handleSearchEnter = () => {
+  if (filteredNavItems.value.length > 0) {
+    navigateToPage(filteredNavItems.value[selectedSearchIndex.value]);
+  }
+};
+
+const navigateSearchResults = (direction) => {
+  const len = filteredNavItems.value.length;
+  if (len === 0) return;
+  selectedSearchIndex.value = (selectedSearchIndex.value + direction + len) % len;
+};
+
+const closeSearch = () => {
+  isSearchFocused.value = false;
+  searchQuery.value = '';
+  selectedSearchIndex.value = 0;
+};
+
+const toggleNotifications = () => {
+  isNotificationsOpen.value = !isNotificationsOpen.value;
+};
+
+const markAsRead = (id) => {
+  const notification = notifications.value.find(n => n.id === id);
+  if (notification) {
+    notification.read = true;
+  }
+};
+
+const markAllAsRead = () => {
+  notifications.value.forEach(n => n.read = true);
+};
+
+const handleClickOutside = (event) => {
+  if (searchContainerRef.value && !searchContainerRef.value.contains(event.target)) {
+    isSearchFocused.value = false;
+  }
+  if (notificationContainerRef.value && !notificationContainerRef.value.contains(event.target)) {
+    isNotificationsOpen.value = false;
+  }
+};
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
 </script>
