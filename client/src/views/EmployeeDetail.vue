@@ -75,10 +75,6 @@
               <p class="font-medium">{{ getContractType(employee?.contract_type) }}</p>
             </div>
             <div>
-              <p class="text-sm text-muted-foreground">Loại hình làm việc</p>
-              <p class="font-medium">{{ getEmploymentType(employee?.employment_type) }}</p>
-            </div>
-            <div>
               <p class="text-sm text-muted-foreground">Trạng thái làm việc</p>
               <BaseBadge :variant="getStatusVariant(employee?.employment_status)">
                 {{ getStatusText(employee?.employment_status) }}
@@ -87,10 +83,6 @@
             <div>
               <p class="text-sm text-muted-foreground">Ngày vào làm</p>
               <p class="font-medium">{{ formatDate(employee?.start_date || employee?.hire_date) }}</p>
-            </div>
-            <div>
-              <p class="text-sm text-muted-foreground">Vị trí làm việc</p>
-              <p class="font-medium">{{ getWorkLocation(employee?.work_location) }}</p>
             </div>
           </div>
 
@@ -171,7 +163,7 @@
             </div>
             <div>
               <p class="text-sm text-muted-foreground">Mối quan hệ</p>
-              <p class="font-medium">{{ employee?.emergency_contact_relationship || 'Chưa có' }}</p>
+              <p class="font-medium">{{ employee?.relationship || employee?.emergency_contact_relationship || 'Chưa có' }}</p>
             </div>
             <div>
               <p class="text-sm text-muted-foreground">Số điện thoại</p>

@@ -32,7 +32,7 @@
           />
           <BaseSelect
             v-model="filters.department"
-            :options="departmentOptions"
+            :options="departmentFilterOptions"
             placeholder="Tất cả phòng ban"
             data-testid="select-department-filter"
           />
@@ -190,7 +190,7 @@
           v-model="form.employee_code" 
           label="Mã nhân viên" 
           required 
-          :disabled="isEditing"
+          disabled
         />
         <BaseInput 
           v-model="form.full_name" 
@@ -413,6 +413,11 @@ const genderOptions = [
   { label: 'Khác', value: 'other' },
 ];
 
+const departmentFilterOptions = computed(() => [
+  { label: 'Tất cả phòng ban', value: '' },
+  ...departmentOptions.value
+]);
+
 const totalEmployees = computed(() => employees.value.length);
 const activeEmployees = computed(() => 
   employees.value.filter(e => e.employment_status === 'active' || e.is_active === true).length
@@ -501,10 +506,22 @@ const resetForm = () => {
   formError.value = '';
 };
 
+const generateEmployeeCode = () => {
+  const existingCodes = employees.value
+    .map(e => e.employee_code || e.code || '')
+    .filter(code => /^EMP\d+$/i.test(code))
+    .map(code => parseInt(code.replace(/^EMP/i, ''), 10));
+  
+  const maxNum = existingCodes.length > 0 ? Math.max(...existingCodes) : 0;
+  const nextNum = maxNum + 1;
+  return `EMP${String(nextNum).padStart(4, '0')}`;
+};
+
 const openCreateModal = () => {
   resetForm();
   isEditing.value = false;
   editingId.value = null;
+  form.value.employee_code = generateEmployeeCode();
   showModal.value = true;
 };
 
@@ -569,7 +586,7 @@ const handleSubmit = async () => {
     return;
   }
   
-  if (!isEditing.value && !form.value.employee_code?.trim()) {
+  if (!form.value.employee_code?.trim()) {
     formError.value = 'Vui lòng nhập mã nhân viên';
     return;
   }
@@ -583,17 +600,16 @@ const handleSubmit = async () => {
       full_name: form.value.full_name,
       gender: form.value.gender || null,
       dob: form.value.date_of_birth || null,
-      work_email: form.value.work_email || null,
-      personal_email: form.value.personal_email || null,
+      personal_email: form.value.personal_email || form.value.work_email || null,
       personal_phone: form.value.phone || null,
       address: form.value.address || null,
+      bank_name: form.value.bank_name || null,
+      bank_account: form.value.bank_account || null,
       department_id: form.value.department_id ? parseInt(form.value.department_id) : null,
       job_title_id: form.value.job_title_id ? parseInt(form.value.job_title_id) : null,
       start_date: form.value.hire_date || null,
       employment_status: form.value.employment_status,
-      employment_type: form.value.employment_type,
-      bank_name: form.value.bank_name || null,
-      bank_account: form.value.bank_account || null
+      employment_type: form.value.employment_type
     };
 
     if (isEditing.value) {
