@@ -37,6 +37,83 @@
       </BaseCard>
     </div>
     
+    <!-- Time Clock Card - Prominent Check-in/Check-out -->
+    <BaseCard class="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold text-foreground">Đồng hồ chấm công</h2>
+            <p class="text-2xl font-mono text-primary">{{ currentTime }}</p>
+            <p class="text-sm text-muted-foreground">{{ currentDate }}</p>
+          </div>
+        </div>
+        
+        <div class="flex flex-col items-center gap-3">
+          <BaseSelect
+            v-if="employees.length > 0"
+            v-model="clockEmployeeId"
+            :options="employeeOptions.filter(o => o.value)"
+            class="w-64"
+            placeholder="Chọn nhân viên"
+          />
+          
+          <div v-if="clockEmployeeId">
+            <div v-if="clockLoading" class="text-muted-foreground">
+              Đang kiểm tra...
+            </div>
+            <div v-else-if="todayRecord === null">
+              <!-- Not checked in yet -->
+              <BaseButton 
+                @click="handleQuickCheckIn" 
+                :disabled="clockProcessing"
+                class="px-8 py-4 text-lg bg-green-600 hover:bg-green-700 text-white"
+              >
+                <svg class="w-6 h-6 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                {{ clockProcessing ? 'Đang xử lý...' : 'CHECK IN' }}
+              </BaseButton>
+            </div>
+            <div v-else-if="todayRecord && !todayRecord.check_out_time">
+              <!-- Checked in but not out -->
+              <div class="text-center mb-2">
+                <span class="text-sm text-muted-foreground">Đã vào lúc: </span>
+                <span class="font-mono font-bold text-green-600">{{ formatTime(todayRecord.check_in_time) }}</span>
+              </div>
+              <BaseButton 
+                @click="handleQuickCheckOut" 
+                :disabled="clockProcessing"
+                class="px-8 py-4 text-lg bg-red-600 hover:bg-red-700 text-white"
+              >
+                <svg class="w-6 h-6 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                {{ clockProcessing ? 'Đang xử lý...' : 'CHECK OUT' }}
+              </BaseButton>
+            </div>
+            <div v-else>
+              <!-- Completed for today -->
+              <div class="text-center p-4 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <svg class="w-8 h-8 text-green-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="font-bold text-green-600">Hoàn thành hôm nay!</p>
+                <p class="text-sm text-muted-foreground mt-1">
+                  {{ formatTime(todayRecord.check_in_time) }} - {{ formatTime(todayRecord.check_out_time) }}
+                </p>
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-muted-foreground">Chọn nhân viên để chấm công</p>
+        </div>
+      </div>
+    </BaseCard>
+    
     <BaseCard>
       <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
         <BaseInput
@@ -231,7 +308,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import BaseCard from '../components/BaseCard.vue';
 import BaseButton from '../components/BaseButton.vue';
 import BaseInput from '../components/BaseInput.vue';
@@ -241,6 +318,9 @@ import BaseTable from '../components/BaseTable.vue';
 import BaseModal from '../components/BaseModal.vue';
 import { attendanceService } from '../services/attendanceService';
 import { employeeService } from '../services/employeeService';
+import { useToast } from '../composables/useToast';
+
+const toast = useToast();
 
 const loading = ref(true);
 const saving = ref(false);
@@ -253,6 +333,82 @@ const editingRecord = ref(null);
 
 const records = ref([]);
 const employees = ref([]);
+
+const clockEmployeeId = ref('');
+const clockLoading = ref(false);
+const clockProcessing = ref(false);
+const todayRecord = ref(null);
+const currentTime = ref('');
+const currentDate = ref('');
+let clockInterval = null;
+
+const updateClock = () => {
+  const now = new Date();
+  currentTime.value = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  currentDate.value = now.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+const checkTodayStatus = async (employeeId) => {
+  if (!employeeId) {
+    todayRecord.value = null;
+    return;
+  }
+  
+  try {
+    clockLoading.value = true;
+    const today = new Date().toISOString().split('T')[0];
+    const response = await attendanceService.getRecords({
+      employee_id: employeeId,
+      from: today,
+      to: today
+    });
+    const todayRecords = response || [];
+    todayRecord.value = todayRecords.length > 0 ? todayRecords[0] : null;
+  } catch (err) {
+    console.error('Error checking today status:', err);
+    todayRecord.value = null;
+  } finally {
+    clockLoading.value = false;
+  }
+};
+
+watch(clockEmployeeId, (newId) => {
+  checkTodayStatus(newId);
+});
+
+const handleQuickCheckIn = async () => {
+  if (!clockEmployeeId.value || clockProcessing.value) return;
+  
+  try {
+    clockProcessing.value = true;
+    await attendanceService.checkIn(parseInt(clockEmployeeId.value), 'present');
+    toast.success('Check-in thành công!');
+    await checkTodayStatus(clockEmployeeId.value);
+    await loadData();
+  } catch (err) {
+    console.error('Error checking in:', err);
+    toast.error(err.response?.data?.error || 'Có lỗi xảy ra khi check-in');
+  } finally {
+    clockProcessing.value = false;
+  }
+};
+
+const handleQuickCheckOut = async () => {
+  if (!todayRecord.value || clockProcessing.value) return;
+  
+  try {
+    clockProcessing.value = true;
+    await attendanceService.checkOut(todayRecord.value.id, todayRecord.value.status || 'present');
+    toast.success('Check-out thành công!');
+    await checkTodayStatus(clockEmployeeId.value);
+    await loadData();
+  } catch (err) {
+    console.error('Error checking out:', err);
+    toast.error(err.response?.data?.error || 'Có lỗi xảy ra khi check-out');
+  } finally {
+    clockProcessing.value = false;
+  }
+};
 
 const todaySummary = ref({
   present: 0,
@@ -476,6 +632,9 @@ const loadData = async () => {
 
 onMounted(async () => {
   try {
+    updateClock();
+    clockInterval = setInterval(updateClock, 1000);
+    
     const today = new Date();
     const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     filters.value.startDate = firstDayOfMonth.toISOString().split('T')[0];
@@ -489,6 +648,12 @@ onMounted(async () => {
     employees.value = employeesRes?.data || employeesRes || [];
   } catch (err) {
     console.error('Error initializing:', err);
+  }
+});
+
+onUnmounted(() => {
+  if (clockInterval) {
+    clearInterval(clockInterval);
   }
 });
 </script>
