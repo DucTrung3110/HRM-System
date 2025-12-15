@@ -72,6 +72,10 @@
             </div>
             <div>
               <p class="text-sm text-muted-foreground">Loại hợp đồng</p>
+              <p class="font-medium">{{ getContractType(employee?.contract_type) }}</p>
+            </div>
+            <div>
+              <p class="text-sm text-muted-foreground">Loại hình làm việc</p>
               <p class="font-medium">{{ getEmploymentType(employee?.employment_type) }}</p>
             </div>
             <div>
@@ -188,9 +192,14 @@
                   <p class="font-medium">{{ history.job_title || 'Chưa có chức danh' }}</p>
                   <p class="text-sm text-muted-foreground">{{ history.department || 'Chưa có phòng ban' }}</p>
                 </div>
-                <BaseBadge size="sm" variant="outline">
-                  {{ formatDate(history.start_date) }} - {{ history.end_date ? formatDate(history.end_date) : 'Hiện tại' }}
-                </BaseBadge>
+                <div class="flex items-center gap-2">
+                  <BaseBadge size="sm" :variant="getHistoryStatusVariant(history.employment_status)">
+                    {{ getHistoryStatusLabel(history.employment_status) }}
+                  </BaseBadge>
+                  <BaseBadge size="sm" variant="outline">
+                    {{ formatDate(history.start_date) }} - {{ history.end_date ? formatDate(history.end_date) : 'Hiện tại' }}
+                  </BaseBadge>
+                </div>
               </div>
             </div>
           </div>
@@ -312,6 +321,47 @@ const getStatusText = (status) => {
     terminated: 'Chấm dứt HĐ'
   };
   return texts[status || 'inactive'] || 'Không xác định';
+};
+
+const getContractType = (type) => {
+  const types = {
+    permanent: 'Không xác định thời hạn',
+    fixed_term: 'Xác định thời hạn',
+    seasonal: 'Thời vụ',
+    probation: 'Thử việc',
+    freelance: 'Tự do'
+  };
+  return types[type || ''] || type || 'Chưa có';
+};
+
+const getHistoryStatusLabel = (status) => {
+  const labels = {
+    active: 'Chính thức',
+    probation: 'Thử việc',
+    promoted: 'Thăng chức',
+    demoted: 'Giáng chức',
+    transferred: 'Điều chuyển',
+    suspended: 'Tạm ngưng',
+    inactive: 'Nghỉ việc',
+    resigned: 'Đã nghỉ',
+    terminated: 'Chấm dứt HĐ'
+  };
+  return labels[status || ''] || status || 'Không xác định';
+};
+
+const getHistoryStatusVariant = (status) => {
+  const variants = {
+    active: 'success',
+    probation: 'warning',
+    promoted: 'success',
+    demoted: 'error',
+    transferred: 'default',
+    suspended: 'error',
+    inactive: 'default',
+    resigned: 'default',
+    terminated: 'default'
+  };
+  return variants[status || ''] || 'default';
 };
 
 onMounted(async () => {

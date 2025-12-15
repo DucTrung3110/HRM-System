@@ -198,7 +198,7 @@
           required 
         />
         <BaseInput 
-          v-model="form.email" 
+          v-model="form.work_email" 
           label="Email công ty" 
           type="email" 
         />
@@ -362,7 +362,7 @@ const filters = ref({
 const form = ref({
   employee_code: '',
   full_name: '',
-  email: '',
+  work_email: '',
   personal_email: '',
   phone: '',
   date_of_birth: '',
@@ -484,7 +484,7 @@ const resetForm = () => {
   form.value = {
     employee_code: '',
     full_name: '',
-    email: '',
+    work_email: '',
     personal_email: '',
     phone: '',
     date_of_birth: '',
@@ -532,7 +532,7 @@ const openEditModal = (employee) => {
   form.value = {
     employee_code: employee.employee_code || employee.code || '',
     full_name: employee.full_name || '',
-    email: employee.email || '',
+    work_email: employee.work_email || employee.email || '',
     personal_email: employee.personal_email || '',
     phone: employee.phone || employee.personal_phone || '',
     date_of_birth: employee.date_of_birth || employee.dob || '',
@@ -583,7 +583,8 @@ const handleSubmit = async () => {
       full_name: form.value.full_name,
       gender: form.value.gender || null,
       dob: form.value.date_of_birth || null,
-      personal_email: form.value.personal_email || form.value.email || null,
+      work_email: form.value.work_email || null,
+      personal_email: form.value.personal_email || null,
       personal_phone: form.value.phone || null,
       address: form.value.address || null,
       department_id: form.value.department_id ? parseInt(form.value.department_id) : null,
