@@ -239,7 +239,17 @@ const getStatusVariant = (status) => {
 
 const loadData = async () => {
   try {
-    const params = { ...filters.value };
+    const params = {};
+    
+    if (filters.value.employee) {
+      params.employee_id = filters.value.employee;
+    }
+    if (filters.value.startDate) {
+      params.from = filters.value.startDate;
+    }
+    if (filters.value.endDate) {
+      params.to = filters.value.endDate;
+    }
     
     if (!isAdmin.value) {
       const user = currentUser.value;

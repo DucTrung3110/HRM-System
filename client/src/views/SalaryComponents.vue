@@ -181,7 +181,15 @@ const editItem = (item) => {
 
 const deactivateItem = async (item) => {
   try {
-    await salaryService.updateComponent(item.id, { is_active: false });
+    const payload = {
+      code: item.code,
+      name: item.name,
+      type: item.type,
+      category: item.category,
+      is_taxable: item.is_taxable ? 1 : 0,
+      is_active: 0
+    };
+    await salaryService.updateComponent(item.id, payload);
     toast.success('Đã tạm ngưng thành phần lương');
     await loadData();
   } catch (err) {
@@ -192,7 +200,15 @@ const deactivateItem = async (item) => {
 
 const activateItem = async (item) => {
   try {
-    await salaryService.updateComponent(item.id, { is_active: true });
+    const payload = {
+      code: item.code,
+      name: item.name,
+      type: item.type,
+      category: item.category,
+      is_taxable: item.is_taxable ? 1 : 0,
+      is_active: 1
+    };
+    await salaryService.updateComponent(item.id, payload);
     toast.success('Đã kích hoạt thành phần lương');
     await loadData();
   } catch (err) {

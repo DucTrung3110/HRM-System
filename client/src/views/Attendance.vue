@@ -189,14 +189,19 @@
           <span class="text-sm font-medium">{{ value || 0 }}h</span>
         </template>
         
-        <template #cell-status="{ value }">
-          <BaseBadge :variant="getStatusVariant(value)">
-            {{ getStatusText(value) }}
-          </BaseBadge>
+        <template #cell-status="{ value, item }">
+          <div class="flex items-center gap-2">
+            <BaseBadge :variant="getStatusVariant(value)">
+              {{ getStatusText(value) }}
+            </BaseBadge>
+            <BaseBadge v-if="item.is_from_schedule" variant="default" class="text-xs">
+              Từ lịch làm việc
+            </BaseBadge>
+          </div>
         </template>
 
         <template v-if="isAdmin" #actions="{ item }">
-          <div class="flex items-center gap-2">
+          <div v-if="!item.is_from_schedule" class="flex items-center gap-2">
             <button
               v-if="!item.check_out_time && item.check_in_time"
               @click="handleCheckOut(item)"
@@ -218,6 +223,7 @@
               </svg>
             </button>
           </div>
+          <span v-else class="text-xs text-muted-foreground">-</span>
         </template>
       </BaseTable>
     </BaseCard>
@@ -319,6 +325,7 @@ import BaseTable from '../components/BaseTable.vue';
 import BaseModal from '../components/BaseModal.vue';
 import { attendanceService } from '../services/attendanceService';
 import { employeeService } from '../services/employeeService';
+import { workScheduleService } from '../services/workScheduleService';
 import { authService } from '../services/authService';
 import { useToast } from '../composables/useToast';
 
@@ -668,8 +675,58 @@ const loadData = async () => {
       }
     }
     
-    const response = await attendanceService.getRecords(params);
-    records.value = response || [];
+    let attendanceRecords = [];
+    try {
+      const response = await attendanceService.getRecords(params);
+      attendanceRecords = response || [];
+    } catch (attendanceErr) {
+      console.warn('Attendance API unavailable, falling back to work schedules');
+    }
+    
+    if (attendanceRecords.length === 0) {
+      try {
+        const scheduleParams = {};
+        if (params.from) scheduleParams.from = params.from;
+        if (params.to) scheduleParams.to = params.to;
+        if (params.employee_id) scheduleParams.employee_id = params.employee_id;
+        
+        const scheduleResponse = await workScheduleService.getAll(scheduleParams);
+        const schedules = scheduleResponse?.data || scheduleResponse || [];
+        
+        let mappedSchedules = schedules.map(schedule => {
+          const statusMap = {
+            'scheduled': 'present',
+            'confirmed': 'present', 
+            'completed': 'present',
+            'cancelled': 'absent',
+            'absent': 'absent'
+          };
+          
+          return {
+            id: `schedule_${schedule.id}`,
+            employee_id: schedule.employee_id,
+            full_name: schedule.employee_name || schedule.full_name || `NV #${schedule.employee_id}`,
+            employee_code: schedule.employee_code || '',
+            record_date: schedule.work_date,
+            check_in_time: schedule.start_time ? `${schedule.work_date}T${schedule.start_time}` : null,
+            check_out_time: schedule.end_time ? `${schedule.work_date}T${schedule.end_time}` : null,
+            status: statusMap[schedule.status] || schedule.status || 'present',
+            total_work_hours: schedule.total_hours || 8,
+            is_from_schedule: true
+          };
+        });
+        
+        if (params.status) {
+          mappedSchedules = mappedSchedules.filter(r => r.status === params.status);
+        }
+        
+        attendanceRecords = mappedSchedules;
+      } catch (scheduleErr) {
+        console.error('Error loading work schedules:', scheduleErr);
+      }
+    }
+    
+    records.value = attendanceRecords;
     
     if (isAdmin.value) {
       const today = new Date().toISOString().split('T')[0];

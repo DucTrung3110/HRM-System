@@ -157,7 +157,14 @@ const editItem = (item) => {
 
 const deactivateItem = async (item) => {
   try {
-    await jobTitleService.update(item.id, { is_active: false });
+    const payload = {
+      code: item.code,
+      name: item.name,
+      job_level: item.job_level,
+      job_family_id: item.job_family_id,
+      is_active: 0
+    };
+    await jobTitleService.update(item.id, payload);
     toast.success('Đã tạm ngưng chức danh');
     await loadData();
   } catch (err) {
@@ -168,7 +175,14 @@ const deactivateItem = async (item) => {
 
 const activateItem = async (item) => {
   try {
-    await jobTitleService.update(item.id, { is_active: true });
+    const payload = {
+      code: item.code,
+      name: item.name,
+      job_level: item.job_level,
+      job_family_id: item.job_family_id,
+      is_active: 1
+    };
+    await jobTitleService.update(item.id, payload);
     toast.success('Đã kích hoạt chức danh');
     await loadData();
   } catch (err) {

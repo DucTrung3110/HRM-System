@@ -10,8 +10,8 @@
           >
             {{ column.label }}
           </th>
-          <th v-if="$slots.actions" class="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Actions
+          <th v-if="$slots.actions" class="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider align-middle">
+            <div class="flex justify-center">Actions</div>
           </th>
         </tr>
       </thead>
@@ -30,8 +30,10 @@
               {{ getNestedValue(item, column.key) }}
             </slot>
           </td>
-          <td v-if="$slots.actions" class="px-6 py-4 text-right">
-            <slot name="actions" :item="item" />
+          <td v-if="$slots.actions" class="px-6 py-4 align-middle">
+            <div class="flex justify-center">
+              <slot name="actions" :item="item" />
+            </div>
           </td>
         </tr>
         <tr v-if="data.length === 0">
