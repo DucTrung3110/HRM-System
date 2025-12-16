@@ -3,7 +3,8 @@
     <div class="max-w-md w-full space-y-8 p-10 bg-white rounded-xl shadow-lg">
       <div>
         <h2 class="mt-6 text-center text-3xl font-extrabold" style="font-family: 'Montserrat', sans-serif;">
-          <span style="color: #124DA3;">CODE</span><span style="color: #F37022;">DEN</span><span style="color: #4EB748;">NGU</span>
+          <span style="color: #124DA3;">CODE</span><span style="color: #F37022;">DEN</span><span
+            style="color: #4EB748;">NGU</span>
         </h2>
         <p class="mt-2 text-center text-sm text-gray-600">
           Đăng nhập để tiếp tục
@@ -12,21 +13,9 @@
 
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
         <div class="rounded-md shadow-sm space-y-4">
-          <BaseInput
-            v-model="email"
-            type="email"
-            label="Email"
-            placeholder="admin@example.com"
-            required
-          />
+          <BaseInput v-model="email" type="email" label="Email" placeholder="admin@example.com" required />
 
-          <BaseInput
-            v-model="password"
-            type="password"
-            label="Mật khẩu"
-            placeholder="••••••••"
-            required
-          />
+          <BaseInput v-model="password" type="password" label="Mật khẩu" placeholder="••••••••" required />
         </div>
 
         <div v-if="error" class="text-red-600 text-sm text-center">
@@ -34,11 +23,7 @@
         </div>
 
         <div>
-          <BaseButton
-            type="submit"
-            :loading="loading"
-            class="w-full"
-          >
+          <BaseButton type="submit" :loading="loading" class="w-full">
             Đăng nhập
           </BaseButton>
         </div>
@@ -81,7 +66,7 @@ const handleLogin = async () => {
     localStorage.setItem('auth_token', token);
     localStorage.setItem('user', JSON.stringify(user));
     localStorage.setItem('user_email', email.value);
-    
+
     // Determine role based on email (RBAC)
     const isAdmin = email.value === ADMIN_EMAIL;
     const role = isAdmin ? 'admin' : 'employee';
