@@ -19,8 +19,14 @@
         ]"
         :data="salaryComponents"
       >
+        <template #cell-name="{ item }">
+          <span :class="{ 'text-muted-foreground line-through': !item.is_active }">{{ item.name }}</span>
+        </template>
         <template #cell-type="{ item }">
           <span class="text-sm">{{ item.type === 'earning' ? 'Thu nhập' : 'Khấu trừ' }}</span>
+        </template>
+        <template #cell-category="{ item }">
+          <span class="text-sm">{{ getCategoryText(item.category) }}</span>
         </template>
         <template #cell-is_active="{ item }">
           <BaseBadge :variant="item.is_active ? 'success' : 'secondary'">
@@ -28,15 +34,36 @@
           </BaseBadge>
         </template>
         <template #actions="{ item }">
-          <div class="flex gap-2">
-            <button @click="editItem(item)" class="p-1 rounded hover-elevate">✏️</button>
-            <button @click="deleteItem(item)" class="p-1 rounded hover-elevate text-destructive">🗑️</button>
+          <div class="flex gap-1">
+            <button 
+              @click="editItem(item)" 
+              class="px-3 py-1.5 text-xs font-medium rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              title="Chỉnh sửa"
+            >
+              Chi tiết
+            </button>
+            <button 
+              v-if="item.is_active"
+              @click="deactivateItem(item)" 
+              class="px-3 py-1.5 text-xs font-medium rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50 transition-colors"
+              title="Tạm ngưng"
+            >
+              Tạm ngưng
+            </button>
+            <button 
+              v-else
+              @click="activateItem(item)" 
+              class="px-3 py-1.5 text-xs font-medium rounded-md bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 transition-colors"
+              title="Kích hoạt"
+            >
+              Kích hoạt
+            </button>
           </div>
         </template>
       </BaseTable>
     </BaseCard>
 
-    <BaseModal v-model="showCreateModal" title="Thêm thành phần lương">
+    <BaseModal v-model="showCreateModal" :title="form.id ? 'Chỉnh sửa thành phần lương' : 'Thêm thành phần lương'">
       <div class="space-y-4">
         <BaseInput v-model="form.code" label="Mã" required />
         <BaseInput v-model="form.name" label="Tên thành phần" required />
@@ -86,7 +113,9 @@ import BaseInput from '../components/BaseInput.vue';
 import BaseSelect from '../components/BaseSelect.vue';
 import BaseBadge from '../components/BaseBadge.vue';
 import { salaryService } from '../services/salaryService';
+import { useToast } from '../composables/useToast';
 
+const toast = useToast();
 const salaryComponents = ref([]);
 const showCreateModal = ref(false);
 const form = ref({
@@ -97,6 +126,18 @@ const form = ref({
   is_taxable: false,
   is_active: true
 });
+
+const getCategoryText = (category) => {
+  const categories = {
+    basic: 'Lương cơ bản',
+    allowance: 'Phụ cấp',
+    bonus: 'Thưởng',
+    tax: 'Thuế',
+    insurance: 'Bảo hiểm',
+    other: 'Khác'
+  };
+  return categories[category] || category;
+};
 
 const loadData = async () => {
   try {
@@ -112,8 +153,10 @@ const saveItem = async () => {
   try {
     if (form.value.id) {
       await salaryService.updateComponent(form.value.id, form.value);
+      toast.success('Cập nhật thành phần lương thành công!');
     } else {
       await salaryService.createComponent(form.value);
+      toast.success('Thêm thành phần lương thành công!');
     }
     showCreateModal.value = false;
     form.value = {
@@ -127,6 +170,7 @@ const saveItem = async () => {
     await loadData();
   } catch (err) {
     console.error('Error saving salary component:', err);
+    toast.error('Có lỗi xảy ra khi lưu thành phần lương');
   }
 };
 
@@ -135,12 +179,25 @@ const editItem = (item) => {
   showCreateModal.value = true;
 };
 
-const deleteItem = async (item) => {
+const deactivateItem = async (item) => {
   try {
-    await salaryService.deleteComponent(item.id);
+    await salaryService.updateComponent(item.id, { is_active: false });
+    toast.success('Đã tạm ngưng thành phần lương');
     await loadData();
   } catch (err) {
-    console.error('Error deleting salary component:', err);
+    console.error('Error deactivating salary component:', err);
+    toast.error('Có lỗi xảy ra khi tạm ngưng thành phần lương');
+  }
+};
+
+const activateItem = async (item) => {
+  try {
+    await salaryService.updateComponent(item.id, { is_active: true });
+    toast.success('Đã kích hoạt thành phần lương');
+    await loadData();
+  } catch (err) {
+    console.error('Error activating salary component:', err);
+    toast.error('Có lỗi xảy ra khi kích hoạt thành phần lương');
   }
 };
 

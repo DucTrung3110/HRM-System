@@ -270,7 +270,6 @@ const allNavItems = [
   { path: '/employment-history', name: 'employment-history', label: 'Lịch sử công tác', icon: IconUser, adminOnly: true },
   { path: '/work-shifts', name: 'work-shifts', label: 'Ca làm việc', icon: IconClock, adminOnly: true },
   { path: '/salary-components', name: 'salary-components', label: 'Thành phần lương', icon: IconCash, adminOnly: true },
-  { path: '/portal', name: 'portal', label: 'Cổng nhân viên', icon: IconUser, adminOnly: true },
 ];
 
 const navItems = computed(() => {

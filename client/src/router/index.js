@@ -7,8 +7,7 @@ const ADMIN_ONLY_ROUTES = [
   '/job-titles',
   '/job-families',
   '/employment-history',
-  '/salary-components',
-  '/portal'
+  '/salary-components'
 ];
 
 const routes = [
@@ -100,12 +99,6 @@ const routes = [
         name: 'salary-components',
         component: () => import('../views/SalaryComponents.vue'),
         meta: { title: 'Quản lý Thành phần lương', adminOnly: true }
-      },
-      {
-        path: 'portal',
-        name: 'portal',
-        component: () => import('../views/EmployeePortal.vue'),
-        meta: { title: 'Cổng Nhân viên', adminOnly: true }
       }
     ]
   },

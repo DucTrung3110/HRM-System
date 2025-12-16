@@ -5,9 +5,6 @@
         <h1 class="text-3xl font-bold text-foreground">{{ isAdmin ? 'Quản lý Chấm công' : 'Chấm công của tôi' }}</h1>
         <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Theo dõi và báo cáo chấm công nhân viên' : 'Xem và quản lý chấm công cá nhân' }}</p>
       </div>
-      <BaseButton v-if="isAdmin" @click="openCheckInModal">
-        + Chấm công
-      </BaseButton>
     </div>
     
     <template v-if="isAdmin">
@@ -39,7 +36,7 @@
       </div>
     </template>
     
-    <BaseCard class="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+    <BaseCard v-if="!isAdmin" class="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
       <div class="flex flex-col md:flex-row items-center justify-between gap-6">
         <div class="flex items-center gap-4">
           <div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -55,16 +52,6 @@
         </div>
         
         <div class="flex flex-col items-center gap-3">
-          <template v-if="isAdmin">
-            <BaseSelect
-              v-if="employees.length > 0"
-              v-model="clockEmployeeId"
-              :options="employeeOptions.filter(o => o.value)"
-              class="w-64"
-              placeholder="Chọn nhân viên"
-            />
-          </template>
-          
           <div v-if="clockEmployeeId">
             <div v-if="clockLoading" class="text-muted-foreground">
               Đang kiểm tra...
@@ -109,7 +96,6 @@
               </div>
             </div>
           </div>
-          <p v-else-if="isAdmin" class="text-sm text-muted-foreground">Chọn nhân viên để chấm công</p>
           <div v-else-if="!clockEmployeeId && !clockLoading">
             <BaseButton 
               @click="handleSelfCheckIn" 
