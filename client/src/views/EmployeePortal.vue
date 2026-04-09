@@ -226,94 +226,81 @@ const calculateWorkHours = (inTime, outTime) => {
   return `${diffHrs.toFixed(1)}h`;
 };
 
-const loadEmployeeInfo = async () => {
+const loadEmployeeInfo = async (userId) => {
   try {
-    // Get current user from localStorage
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    if (user.employee_id) {
-      const response = await axiosClient.get(`/employees/${user.employee_id}`);
-      currentEmployee.value = response.data;
+    const response = await axiosClient.get('/employees');
+    const employees = response.data?.data || response.data || [];
+    const me = employees.find(emp => emp.user_id === userId);
+    if (me) {
+      currentEmployee.value = me;
+      return me.id;
     }
   } catch (error) {
     console.error('Error loading employee info:', error);
   }
+  return null;
 };
 
-const loadAttendanceData = async () => {
+const loadAttendanceData = async (empId) => {
   try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    if (user.employee_id) {
-      const response = await axiosClient.get('/attendance', {
-        params: { employee_id: user.employee_id }
-      });
-      attendanceRecords.value = response.data;
+    const response = await axiosClient.get('/attendance', {
+      params: { employee_id: empId }
+    });
+    const records = response.data?.data || response.data || [];
+    attendanceRecords.value = records;
 
-      // Calculate stats
-      const stats = {
-        present: 0,
-        absent: 0,
-        late: 0
-      };
-      response.data.forEach(record => {
-        if (record.status === 'present') stats.present++;
-        else if (record.status === 'absent') stats.absent++;
-        else if (record.status === 'late') stats.late++;
-      });
-      attendanceStats.value = stats;
-    }
+    const stats = { present: 0, absent: 0, late: 0 };
+    records.forEach(record => {
+      if (record.status === 'present') stats.present++;
+      else if (record.status === 'absent') stats.absent++;
+      else if (record.status === 'late') stats.late++;
+    });
+    attendanceStats.value = stats;
   } catch (error) {
     console.error('Error loading attendance data:', error);
   }
 };
 
-const loadLeaveData = async () => {
+const loadLeaveData = async (empId) => {
   try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    if (user.employee_id) {
-      // Load leave balances
-      const balancesResponse = await axiosClient.get(`/leave-balances/${user.employee_id}`);
-      leaveBalances.value = balancesResponse.data;
+    const balancesResponse = await axiosClient.get(`/leave-balances/${empId}`);
+    leaveBalances.value = balancesResponse.data?.data || balancesResponse.data || [];
 
-      // Load leave requests
-      const requestsResponse = await axiosClient.get('/leave-requests', {
-        params: { employee_id: user.employee_id }
-      });
-      leaveRequests.value = requestsResponse.data;
-    }
+    const requestsResponse = await axiosClient.get('/leave-requests', {
+      params: { employee_id: empId }
+    });
+    leaveRequests.value = requestsResponse.data?.data || requestsResponse.data || [];
   } catch (error) {
     console.error('Error loading leave data:', error);
   }
 };
 
-const loadSalaryData = async () => {
+const loadSalaryData = async (empId) => {
   try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    if (user.employee_id) {
-      const response = await axiosClient.get(`/employees/${user.employee_id}/salaries`);
-      if (response.data && response.data.length > 0) {
-        // Calculate totals from salary components
-        const salaryData = response.data;
-        let basic = 0;
-        let allowances = 0;
-        let deductions = 0;
+    const response = await axiosClient.get(`/employees/${empId}/salaries`);
+    const salaryData = response.data?.data || response.data || [];
+    
+    if (salaryData.length > 0) {
+      let basic = 0;
+      let allowances = 0;
+      let deductions = 0;
 
-        salaryData.forEach(item => {
-          if (item.salary_component?.category === 'basic') {
-            basic += item.amount;
-          } else if (item.salary_component?.type === 'earning') {
-            allowances += item.amount;
-          } else if (item.salary_component?.type === 'deduction') {
-            deductions += item.amount;
-          }
-        });
+      salaryData.forEach(item => {
+        if (item.salary_component?.category === 'basic') {
+          basic += Number(item.amount) || 0;
+        } else if (item.salary_component?.type === 'earning') {
+          allowances += Number(item.amount) || 0;
+        } else if (item.salary_component?.type === 'deduction') {
+          deductions += Number(item.amount) || 0;
+        }
+      });
 
-        salary.value = {
-          basic,
-          allowances,
-          deductions,
-          net: basic + allowances - deductions
-        };
-      }
+      salary.value = {
+        basic,
+        allowances,
+        deductions,
+        net: basic + allowances - deductions
+      };
     }
   } catch (error) {
     console.error('Error loading salary data:', error);
@@ -321,11 +308,16 @@ const loadSalaryData = async () => {
 };
 
 onMounted(async () => {
-  await loadEmployeeInfo();
-  await Promise.all([
-    loadAttendanceData(),
-    loadLeaveData(),
-    loadSalaryData()
-  ]);
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  if (user.id) {
+    const empId = await loadEmployeeInfo(user.id);
+    if (empId) {
+      await Promise.all([
+        loadAttendanceData(empId),
+        loadLeaveData(empId),
+        loadSalaryData(empId)
+      ]);
+    }
+  }
 });
 </script>
