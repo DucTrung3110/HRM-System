@@ -1,16 +1,16 @@
 <template>
-  <div class="w-full overflow-x-auto">
+  <div class="w-full overflow-auto max-h-[calc(100vh-250px)] relative border border-border sm:rounded-lg">
     <table class="w-full border-collapse" :data-testid="testId">
       <thead>
-        <tr class="bg-muted">
+        <tr class="bg-muted/80 backdrop-blur-md">
           <th
             v-for="column in columns"
             :key="column.key"
-            class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+            class="sticky top-0 z-10 px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-muted/90 shadow-sm"
           >
             {{ column.label }}
           </th>
-          <th v-if="$slots.actions" class="px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider align-middle">
+          <th v-if="$slots.actions" class="sticky top-0 z-10 px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider align-middle bg-muted/90 shadow-sm">
             <div class="flex justify-center">Actions</div>
           </th>
         </tr>
@@ -24,13 +24,13 @@
           <td
             v-for="column in columns"
             :key="column.key"
-            class="px-6 py-4 text-sm text-foreground"
+            class="px-6 py-5 text-sm text-foreground"
           >
             <slot :name="`cell-${column.key}`" :item="item" :value="getNestedValue(item, column.key)">
               {{ getNestedValue(item, column.key) }}
             </slot>
           </td>
-          <td v-if="$slots.actions" class="px-6 py-4 align-middle">
+          <td v-if="$slots.actions" class="px-6 py-5 align-middle">
             <div class="flex justify-center">
               <slot name="actions" :item="item" />
             </div>

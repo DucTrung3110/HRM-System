@@ -10,6 +10,37 @@
       <p class="text-muted-foreground">Đang tải dữ liệu từ API...</p>
     </div>
 
+    <!-- Quick Actions -->
+    <div v-if="!loading" class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+      <BaseCard hoverable @click="$router.push('/attendance')" class="p-4 flex flex-col items-center justify-center cursor-pointer group bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors py-6">
+        <div class="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+        </div>
+        <span class="text-sm font-semibold text-primary">Chấm công</span>
+      </BaseCard>
+
+      <BaseCard hoverable @click="$router.push('/leaves')" class="p-4 flex flex-col items-center justify-center cursor-pointer group bg-warning/5 border-warning/20 hover:bg-warning/10 transition-colors py-6">
+        <div class="w-12 h-12 rounded-full bg-warning/20 flex items-center justify-center text-warning group-hover:scale-110 transition-transform mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </div>
+        <span class="text-sm font-semibold text-warning">Tạo đơn nghỉ phép</span>
+      </BaseCard>
+
+      <BaseCard hoverable @click="$router.push('/employees')" class="p-4 flex flex-col items-center justify-center cursor-pointer group bg-info/5 border-info/20 hover:bg-info/10 transition-colors py-6">
+        <div class="w-12 h-12 rounded-full bg-info/20 flex items-center justify-center text-info group-hover:scale-110 transition-transform mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+        </div>
+        <span class="text-sm font-semibold text-info">Thêm nhân viên</span>
+      </BaseCard>
+
+      <BaseCard hoverable @click="$router.push('/salaries')" class="p-4 flex flex-col items-center justify-center cursor-pointer group bg-success/5 border-success/20 hover:bg-success/10 transition-colors py-6">
+        <div class="w-12 h-12 rounded-full bg-success/20 flex items-center justify-center text-success group-hover:scale-110 transition-transform mb-3">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <span class="text-sm font-semibold text-success">Xuất bảng lương</span>
+      </BaseCard>
+    </div>
+
     <!-- Stats Cards -->
     <div v-if="!loading" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
       <BaseCard hoverable data-testid="card-total-employees" class="p-6 overflow-hidden relative group">

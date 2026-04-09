@@ -183,81 +183,53 @@
       size="lg"
       data-testid="modal-employee"
     >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BaseInput 
-          v-model="form.employee_code" 
-          label="Mã nhân viên" 
-          required 
-          disabled
-        />
-        <BaseInput 
-          v-model="form.full_name" 
-          label="Họ và tên" 
-          required 
-        />
-        <BaseInput 
-          v-model="form.work_email" 
-          label="Email công ty" 
-          type="email" 
-        />
-        <BaseInput 
-          v-model="form.personal_email" 
-          label="Email cá nhân" 
-          type="email" 
-        />
-        <BaseInput 
-          v-model="form.phone" 
-          label="Số điện thoại" 
-        />
-        <BaseInput 
-          v-model="form.date_of_birth" 
-          label="Ngày sinh" 
-          type="date" 
-        />
-        <BaseSelect 
-          v-model="form.gender" 
-          label="Giới tính" 
-          :options="genderOptions" 
-        />
-        <BaseSelect 
-          v-model="form.department_id" 
-          label="Phòng ban" 
-          :options="departmentOptions" 
-        />
-        <BaseSelect 
-          v-model="form.job_title_id" 
-          label="Chức danh" 
-          :options="jobTitleOptions" 
-        />
-        <BaseInput 
-          v-model="form.hire_date" 
-          label="Ngày vào làm" 
-          type="date" 
-        />
-        <BaseSelect 
-          v-model="form.employment_status" 
-          label="Trạng thái làm việc" 
-          :options="employmentStatusOptions" 
-        />
-        <BaseSelect 
-          v-model="form.employment_type" 
-          label="Loại hình làm việc" 
-          :options="employmentTypeOptions" 
-        />
-        <div class="md:col-span-2">
-          <BaseInput 
-            v-model="form.address" 
-            label="Địa chỉ" 
-          />
+      <!-- Stepper Header -->
+      <div class="mb-8 mt-2 flex items-center justify-between relative px-4">
+        <div class="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-1 bg-border z-0 rounded-full"></div>
+        <div class="absolute left-10 top-1/2 -translate-y-1/2 h-1 bg-primary z-0 transition-all duration-300 rounded-full" :style="{ width: ((currentStep - 1) / 2) * 85 + '%' }"></div>
+        
+        <div v-for="step in 3" :key="step" class="relative z-10 flex flex-col items-center">
+          <div 
+            class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-colors duration-300 border-4"
+            :class="currentStep >= step ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border'"
+          >
+            {{ step }}
+          </div>
+          <span class="text-xs font-semibold mt-2 absolute -bottom-5 w-24 text-center" :class="currentStep >= step ? 'text-primary' : 'text-muted-foreground'">
+            {{ step === 1 ? 'Cá nhân' : (step === 2 ? 'Công việc' : 'Tài khoản') }}
+          </span>
         </div>
-        <BaseInput 
-          v-model="form.bank_name" 
-          label="Ngân hàng" 
-        />
-        <BaseInput 
-          v-model="form.bank_account" 
-          label="Số tài khoản" 
-        />
+      </div>
+
+      <div class="mt-6">
+        <!-- Step 1: Cá nhân -->
+        <div v-show="currentStep === 1" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <BaseInput v-model="form.employee_code" label="Mã nhân viên" required disabled />
+          <BaseInput v-model="form.full_name" label="Họ và tên" required />
+          <BaseInput v-model="form.work_email" label="Email công ty" type="email" />
+          <BaseInput v-model="form.personal_email" label="Email cá nhân" type="email" />
+          <BaseInput v-model="form.phone" label="Số điện thoại" />
+          <BaseInput v-model="form.date_of_birth" label="Ngày sinh" type="date" />
+          <BaseSelect v-model="form.gender" label="Giới tính" :options="genderOptions" />
+          <div class="md:col-span-2">
+            <BaseInput v-model="form.address" label="Địa chỉ" />
+          </div>
+        </div>
+
+        <!-- Step 2: Công việc -->
+        <div v-show="currentStep === 2" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <BaseSelect v-model="form.department_id" label="Phòng ban" :options="departmentOptions" />
+          <BaseSelect v-model="form.job_title_id" label="Chức danh" :options="jobTitleOptions" />
+          <BaseInput v-model="form.hire_date" label="Ngày vào làm" type="date" />
+          <BaseSelect v-model="form.employment_status" label="Trạng thái làm việc" :options="employmentStatusOptions" />
+          <BaseSelect v-model="form.employment_type" label="Loại hình làm việc" :options="employmentTypeOptions" />
+        </div>
+
+        <!-- Step 3: Tài khoản ngân hàng -->
+        <div v-show="currentStep === 3" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <BaseInput v-model="form.bank_name" label="Ngân hàng" />
+          <BaseInput v-model="form.bank_account" label="Số tài khoản" />
+        </div>
       </div>
 
       <div v-if="formError" class="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
@@ -265,10 +237,16 @@
       </div>
 
       <template #footer>
-        <BaseButton variant="outline" @click="closeModal" :disabled="saving">Hủy</BaseButton>
-        <BaseButton @click="handleSubmit" :disabled="saving">
-          {{ saving ? 'Đang lưu...' : (isEditing ? 'Cập nhật' : 'Tạo mới') }}
-        </BaseButton>
+        <div class="flex justify-between w-full">
+          <BaseButton variant="outline" @click="closeModal" :disabled="saving">Hủy bỏ</BaseButton>
+          <div class="flex gap-2">
+            <BaseButton variant="outline" @click="currentStep--" v-if="currentStep > 1" :disabled="saving">Quay lại</BaseButton>
+            <BaseButton @click="handleNextStep" v-if="currentStep < 3">Tiếp tục</BaseButton>
+            <BaseButton @click="handleSubmit" v-if="currentStep === 3" :disabled="saving">
+              {{ saving ? 'Đang lưu...' : (isEditing ? 'Cập nhật' : 'Tạo mới') }}
+            </BaseButton>
+          </div>
+        </div>
       </template>
     </BaseModal>
 
@@ -348,6 +326,16 @@ const statusTarget = ref(null);
 const newStatus = ref('');
 const terminationDate = ref('');
 const terminationReason = ref('');
+const currentStep = ref(1);
+
+const handleNextStep = () => {
+  if (currentStep.value === 1 && !form.value.full_name?.trim()) {
+    formError.value = 'Vui lòng nhập họ và tên';
+    return;
+  }
+  formError.value = '';
+  currentStep.value++;
+};
 
 const employees = ref([]);
 const departmentOptions = ref([]);
@@ -531,6 +519,7 @@ const generateEmployeeCode = () => {
 
 const openCreateModal = () => {
   resetForm();
+  currentStep.value = 1;
   isEditing.value = false;
   editingId.value = null;
   form.value.employee_code = generateEmployeeCode();
@@ -539,6 +528,7 @@ const openCreateModal = () => {
 
 const openEditModal = (employee) => {
   resetForm();
+  currentStep.value = 1;
   isEditing.value = true;
   editingId.value = employee.id;
   
@@ -592,6 +582,7 @@ const openStatusModal = (employee) => {
 const closeModal = () => {
   showModal.value = false;
   resetForm();
+  currentStep.value = 1;
 };
 
 const handleSubmit = async () => {

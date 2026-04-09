@@ -28,20 +28,56 @@
         </button>
       </div>
 
-      <nav class="p-4 space-y-1 overflow-y-auto h-[calc(100%-4rem)]">
-        <router-link
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          @click="isMobileMenuOpen = false"
-          class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors"
-          :class="isActive(item.path) 
-            ? 'bg-sidebar-accent text-sidebar-accent-foreground border-l-4 border-primary' 
-            : 'text-sidebar-foreground hover-elevate'"
-        >
-          <component :is="item.icon" class="flex-shrink-0 w-5 h-5" />
-          <span class="font-medium text-sm">{{ item.label }}</span>
-        </router-link>
+      <nav class="p-4 space-y-4 overflow-y-auto h-[calc(100%-4rem)]">
+        <!-- Render Dashboards (No heading) -->
+        <div class="space-y-1">
+          <router-link
+            v-for="item in dashboardGroup.items"
+            :key="item.path"
+            :to="item.path"
+            @click="isMobileMenuOpen = false"
+            class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group"
+            :class="isActive(item.path) 
+              ? 'bg-sidebar-primary/10 text-sidebar-primary font-semibold' 
+              : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'"
+          >
+            <component :is="item.icon" class="flex-shrink-0 w-5 h-5 transition-colors" :class="isActive(item.path) ? 'text-sidebar-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground'" />
+            <span class="text-sm font-medium">{{ item.label }}</span>
+          </router-link>
+        </div>
+
+        <!-- Render collapsible groups -->
+        <div v-for="group in menuGroups" :key="group.id" class="space-y-1">
+          <button 
+            @click="toggleMenu(group)"
+            class="w-full flex items-center justify-between px-4 py-2 mt-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+          >
+            <span>{{ group.label }}</span>
+            <svg 
+              class="w-4 h-4 transition-transform duration-200" 
+              :class="group.isOpen ? 'rotate-180' : ''"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <div v-show="group.isOpen" class="space-y-1 mt-1">
+            <router-link
+              v-for="item in group.items"
+              :key="item.path"
+              :to="item.path"
+              @click="isMobileMenuOpen = false"
+              class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group"
+              :class="isActive(item.path) 
+                ? 'bg-sidebar-primary/10 text-sidebar-primary font-semibold' 
+                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'"
+            >
+              <component :is="item.icon" class="flex-shrink-0 w-5 h-5 transition-colors" :class="isActive(item.path) ? 'text-sidebar-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground'" />
+              <span class="text-sm font-medium">{{ item.label }}</span>
+            </router-link>
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -256,27 +292,74 @@ const handleLogout = () => {
   }
 };
 
-const allNavItems = [
-  { path: '/', name: 'dashboard', label: 'Dashboard', icon: IconDashboard, adminOnly: true },
-  { path: '/employees', name: 'employees', label: 'Nhân viên', icon: IconUser, adminOnly: true },
-  { path: '/departments', name: 'departments', label: 'Phòng ban', icon: IconBuilding, adminOnly: true },
-  { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: false },
-  { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: false },
-  { path: '/salaries', name: 'salaries', label: 'Lương', icon: IconCash, adminOnly: false },
-  { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: false },
-  { path: '/roles', name: 'roles', label: 'Vai trò', icon: IconShield, adminOnly: true },
-  { path: '/job-titles', name: 'job-titles', label: 'Chức danh', icon: IconUser, adminOnly: true },
-  { path: '/job-families', name: 'job-families', label: 'Nhóm chức danh', icon: IconBuilding, adminOnly: true },
-  { path: '/employment-history', name: 'employment-history', label: 'Lịch sử công tác', icon: IconUser, adminOnly: true },
-  { path: '/work-shifts', name: 'work-shifts', label: 'Ca làm việc', icon: IconClock, adminOnly: true },
-  { path: '/salary-components', name: 'salary-components', label: 'Thành phần lương', icon: IconCash, adminOnly: true },
-];
+const navGroupsData = ref([
+  {
+    id: 'dashboard',
+    label: 'Tổng quan',
+    isOpen: true,
+    items: [
+      { path: '/', name: 'dashboard', label: 'Dashboard', icon: IconDashboard, adminOnly: true }
+    ]
+  },
+  {
+    id: 'hr',
+    label: 'Nhân sự',
+    isOpen: true,
+    items: [
+      { path: '/employees', name: 'employees', label: 'Nhân viên', icon: IconUser, adminOnly: true },
+      { path: '/employment-history', name: 'employment-history', label: 'Lịch sử công', icon: IconUser, adminOnly: true },
+      { path: '/departments', name: 'departments', label: 'Phòng ban', icon: IconBuilding, adminOnly: true },
+      { path: '/roles', name: 'roles', label: 'Vai trò', icon: IconShield, adminOnly: true },
+    ]
+  },
+  {
+    id: 'time',
+    label: 'Công & Lịch',
+    isOpen: true,
+    items: [
+      { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: false },
+      { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: false },
+      { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: false },
+      { path: '/work-shifts', name: 'work-shifts', label: 'Ca làm việc', icon: IconClock, adminOnly: true },
+    ]
+  },
+  {
+    id: 'payroll',
+    label: 'Lương & Phúc lợi',
+    isOpen: true,
+    items: [
+      { path: '/salaries', name: 'salaries', label: 'Lương', icon: IconCash, adminOnly: false },
+      { path: '/salary-components', name: 'salary-components', label: 'Thành phần lương', icon: IconCash, adminOnly: true },
+    ]
+  },
+  {
+    id: 'settings',
+    label: 'Cấu hình',
+    isOpen: false,
+    items: [
+      { path: '/job-families', name: 'job-families', label: 'Nhóm chức danh', icon: IconBuilding, adminOnly: true },
+      { path: '/job-titles', name: 'job-titles', label: 'Chức danh', icon: IconUser, adminOnly: true },
+    ]
+  }
+]);
+
+const filteredGroups = computed(() => {
+  return navGroupsData.value.map(group => ({
+    ...group,
+    items: group.items.filter(item => isAdmin.value || !item.adminOnly)
+  })).filter(group => group.items.length > 0);
+});
+
+const dashboardGroup = computed(() => filteredGroups.value.find(g => g.id === 'dashboard') || { items: [] });
+const menuGroups = computed(() => filteredGroups.value.filter(g => g.id !== 'dashboard'));
+
+const toggleMenu = (groupItem) => {
+  const g = navGroupsData.value.find(g => g.id === groupItem.id);
+  if(g) { g.isOpen = !g.isOpen; }
+};
 
 const navItems = computed(() => {
-  if (isAdmin.value) {
-    return allNavItems;
-  }
-  return allNavItems.filter(item => !item.adminOnly);
+  return filteredGroups.value.flatMap(group => group.items);
 });
 
 const filteredNavItems = computed(() => {
