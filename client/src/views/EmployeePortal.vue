@@ -169,7 +169,9 @@ import BaseCard from '../components/BaseCard.vue';
 import BaseTable from '../components/BaseTable.vue';
 import BaseBadge from '../components/BaseBadge.vue';
 import axiosClient from '../services/axiosClient';
+import { useNotificationStore } from '../stores/notificationStore';
 
+const notificationStore = useNotificationStore();
 const activeTab = ref('attendance');
 const showLeaveModal = ref(false);
 
@@ -230,10 +232,13 @@ const loadEmployeeInfo = async (userId) => {
   try {
     const response = await axiosClient.get('/employees');
     const employees = response.data?.data || response.data || [];
-    const me = employees.find(emp => emp.user_id === userId);
+    // Force toString() if necessary, or loose equality
+    const me = employees.find(emp => String(emp.user_id) === String(userId));
     if (me) {
       currentEmployee.value = me;
       return me.id;
+    } else {
+      notificationStore.addError('Tài khoản này chưa được liên kết với Hồ sơ nhân viên nào trên hệ thống!');
     }
   } catch (error) {
     console.error('Error loading employee info:', error);

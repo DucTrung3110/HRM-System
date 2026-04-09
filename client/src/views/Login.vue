@@ -80,7 +80,7 @@ const handleLogin = async () => {
     if (isAdmin) {
       router.push('/');
     } else {
-      router.push('/attendance');
+      router.push('/employee-portal');
     }
   } catch (err: any) {
     error.value = err.response?.data?.error || 'Đăng nhập thất bại';
