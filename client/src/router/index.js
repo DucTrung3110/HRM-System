@@ -23,6 +23,12 @@ const routes = [
         meta: { title: 'Dashboard', requiresAuth: true, adminOnly: true }
       },
       {
+        path: 'employee-portal',
+        name: 'employee-portal',
+        component: () => import('../views/EmployeePortal.vue'),
+        meta: { title: 'Tổng quan Portal', requiresAuth: true, adminOnly: false }
+      },
+      {
         path: 'employees',
         name: 'employees',
         component: () => import('../views/Employees.vue'),
@@ -133,12 +139,12 @@ router.beforeEach((to, from, next) => {
     }
     
     if (to.path === '/login' && isAuthenticated) {
-      next(isAdmin ? '/' : '/attendance');
+      next(isAdmin ? '/' : '/employee-portal');
       return;
     }
     
     if (to.meta.adminOnly && !isAdmin) {
-      next('/attendance');
+      next('/employee-portal');
       return;
     }
 

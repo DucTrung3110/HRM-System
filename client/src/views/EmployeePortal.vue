@@ -44,32 +44,59 @@
     <!-- Attendance Tab -->
     <div v-if="activeTab === 'attendance'">
       <BaseCard>
-        <div class="grid grid-cols-3 gap-4 mb-6">
-          <div class="text-center p-4 rounded-lg bg-success/10">
-            <p class="text-2xl font-bold text-success">{{ attendanceStats.present }}</p>
-            <p class="text-sm text-muted-foreground">Có mặt</p>
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-lg font-bold text-foreground">Tổng quan Điểm danh</h3>
+          <BaseButton class="shadow-sm">
+            <svg class="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Chấm công ngay
+          </BaseButton>
+        </div>
+
+        <div class="mb-8 p-6 bg-gradient-to-r from-primary/10 to-transparent rounded-2xl border border-primary/20">
+          <h4 class="text-xl font-extrabold text-primary mb-2">Tiến độ tháng này</h4>
+          <p class="text-sm text-muted-foreground mb-4">Bạn đã có mặt <strong class="text-foreground text-base">{{ attendanceStats.present }}</strong> ngày. Luôn giữ vững năng lượng nhé!</p>
+          
+          <div class="w-full bg-border h-4 rounded-full overflow-hidden shadow-inner">
+            <div class="bg-primary h-full rounded-full transition-all duration-1000 origin-left" :style="{ width: Math.min((attendanceStats.present / 22) * 100, 100) + '%' }"></div>
           </div>
-          <div class="text-center p-4 rounded-lg bg-destructive/10">
-            <p class="text-2xl font-bold text-destructive">{{ attendanceStats.absent }}</p>
-            <p class="text-sm text-muted-foreground">Vắng mặt</p>
-          </div>
-          <div class="text-center p-4 rounded-lg bg-warning/10">
-            <p class="text-2xl font-bold text-warning">{{ attendanceStats.late }}</p>
-            <p class="text-sm text-muted-foreground">Muộn</p>
+          
+          <div class="flex flex-wrap items-center gap-6 mt-5 text-sm font-semibold">
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-success shadow-sm"></span> Đúng giờ: {{ attendanceStats.present }}</div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-warning shadow-sm"></span> Đi muộn: {{ attendanceStats.late }}</div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-destructive shadow-sm"></span> Vắng mặt: {{ attendanceStats.absent }}</div>
           </div>
         </div>
 
-        <div class="space-y-2">
-          <h3 class="font-semibold">Chấm công gần đây</h3>
+        <div class="space-y-4">
+          <h3 class="font-semibold text-foreground">Lịch sử Chấm công (Time-log)</h3>
           <BaseTable
             :columns="[
-              { key: 'record_date', label: 'Ngày' },
-              { key: 'check_in_time', label: 'Giờ vào' },
-              { key: 'check_out_time', label: 'Giờ ra' },
+              { key: 'record_date', label: 'Ngày làm việc' },
+              { key: 'time_log', label: 'Vào - Ra' },
+              { key: 'work_hours', label: 'Số giờ làm' },
               { key: 'status', label: 'Trạng thái' }
             ]"
-            :data="attendanceRecords.slice(0, 10)"
-          />
+            :data="attendanceRecords"
+          >
+            <!-- Custom Templates for the Table -->
+            <template #cell-time_log="{ item }">
+              <div class="flex items-center gap-2 font-medium">
+                <span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">{{ item.check_in_time || '--:--' }}</span>
+                <span class="text-muted-foreground">→</span>
+                <span class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">{{ item.check_out_time || '--:--' }}</span>
+              </div>
+            </template>
+            
+            <template #cell-work_hours="{ item }">
+              <span class="font-bold text-primary">{{ calculateWorkHours(item.check_in_time, item.check_out_time) }}</span>
+            </template>
+
+            <template #cell-status="{ item }">
+              <BaseBadge :variant="item.status === 'present' ? 'success' : (item.status === 'late' ? 'warning' : 'destructive')">
+                {{ item.status === 'present' ? 'Có mặt' : (item.status === 'late' ? 'Muộn' : 'Vắng') }}
+              </BaseBadge>
+            </template>
+          </BaseTable>
         </div>
       </BaseCard>
     </div>
@@ -140,6 +167,7 @@ import { ref, onMounted, computed } from 'vue';
 import BaseButton from '../components/BaseButton.vue';
 import BaseCard from '../components/BaseCard.vue';
 import BaseTable from '../components/BaseTable.vue';
+import BaseBadge from '../components/BaseBadge.vue';
 import axiosClient from '../services/axiosClient';
 
 const activeTab = ref('attendance');
@@ -184,6 +212,18 @@ const formatCurrency = (value) => {
     style: 'currency',
     currency: 'VND'
   }).format(value);
+};
+
+const calculateWorkHours = (inTime, outTime) => {
+  if (!inTime || !outTime) return '-';
+  const t1 = new Date(`1970-01-01T${inTime}`);
+  const t2 = new Date(`1970-01-01T${outTime}`);
+  
+  const diffMs = t2 - t1;
+  if(diffMs < 0) return '-';
+
+  const diffHrs = diffMs / (1000 * 60 * 60);
+  return `${diffHrs.toFixed(1)}h`;
 };
 
 const loadEmployeeInfo = async () => {

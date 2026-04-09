@@ -2,11 +2,11 @@
   <div class="w-full overflow-auto max-h-[calc(100vh-250px)] relative border border-border sm:rounded-lg">
     <table class="w-full border-collapse" :data-testid="testId">
       <thead>
-        <tr class="bg-muted/80 backdrop-blur-md">
+        <tr class="bg-muted">
           <th
             v-for="column in columns"
             :key="column.key"
-            class="sticky top-0 z-10 px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-muted/90 shadow-sm"
+            class="sticky top-0 z-10 px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-muted shadow-sm"
           >
             {{ column.label }}
           </th>

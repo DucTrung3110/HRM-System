@@ -344,6 +344,17 @@ const navGroupsData = ref([
 ]);
 
 const filteredGroups = computed(() => {
+  if (!isAdmin.value) {
+    return [{
+      id: 'dashboard',
+      label: 'Tổng quan',
+      isOpen: true,
+      items: [
+        { path: '/employee-portal', name: 'employee-portal', label: 'Cổng Portal', icon: IconDashboard, adminOnly: false }
+      ]
+    }];
+  }
+
   return navGroupsData.value.map(group => ({
     ...group,
     items: group.items.filter(item => isAdmin.value || !item.adminOnly)
