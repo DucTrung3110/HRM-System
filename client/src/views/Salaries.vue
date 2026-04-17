@@ -1,11 +1,11 @@
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-foreground">{{ isAdmin ? 'Quản lý Lương' : 'Phiếu lương của tôi' }}</h1>
-        <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Cấu trúc và thành phần lương nhân viên' : 'Xem chi tiết lương cá nhân' }}</p>
+        <h1 class="text-2xl sm:text-3xl font-bold text-foreground">{{ isAdmin ? 'Quản lý Lương' : 'Phiếu lương của tôi' }}</h1>
+        <p class="text-sm sm:text-base text-muted-foreground mt-1">{{ isAdmin ? 'Cấu trúc và thành phần lương nhân viên' : 'Xem chi tiết lương cá nhân' }}</p>
       </div>
-      <div class="flex gap-2 items-center">
+      <div class="flex flex-wrap gap-2 items-center">
         <!-- Single Export (only visible when a specific user or month is loaded) -->
         <template v-if="salaryComponents.length > 0 && (selectedEmployee || !isAdmin)">
           <button
@@ -55,7 +55,7 @@
     
     <template v-if="isAdmin">
       <BaseCard>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           <BaseSelect
             v-model="selectedEmployee"
             label="Chọn nhân viên"
@@ -92,7 +92,7 @@
             <p class="text-sm text-muted-foreground">Nhân viên</p>
             <p class="font-medium text-lg">{{ currentUser?.full_name || currentUser?.email || 'Bạn' }}</p>
           </div>
-          <div class="ml-auto">
+          <div class="ml-auto w-full sm:w-auto mt-4 sm:mt-0">
             <BaseInput
               v-model="selectedMonth"
               type="month"

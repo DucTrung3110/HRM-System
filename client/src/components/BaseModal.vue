@@ -3,7 +3,7 @@
     <Transition name="modal">
       <div
         v-if="modelValue"
-        class="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto"
+        class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm overflow-y-auto"
         @click="handleBackdropClick"
         :data-testid="testId"
       >
@@ -14,7 +14,7 @@
           aria-modal="true"
         >
           <!-- Header -->
-          <div v-if="$slots.header || title" class="flex items-center justify-between border-b border-border pb-4">
+          <div v-if="$slots.header || title" class="flex items-center justify-between border-b border-border pb-3 sm:pb-4">
             <slot name="header">
               <h2 class="text-xl font-semibold text-foreground">{{ title }}</h2>
             </slot>
@@ -31,12 +31,12 @@
           </div>
 
           <!-- Content -->
-          <div class="py-6">
+          <div class="py-4 sm:py-6">
             <slot />
           </div>
 
           <!-- Footer -->
-          <div v-if="$slots.footer" class="flex justify-end gap-3 border-t border-border pt-4">
+          <div v-if="$slots.footer" class="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 border-t border-border pt-3 sm:pt-4">
             <slot name="footer" />
           </div>
         </div>
@@ -69,13 +69,13 @@ const emit = defineEmits<{
 }>();
 
 const modalClasses = computed(() => {
-  const base = 'bg-card rounded-xl p-6 shadow-xl max-h-[90vh] overflow-y-auto';
+  const base = 'bg-card rounded-xl p-4 sm:p-6 shadow-xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto w-full';
 
   const sizes = {
-    sm: 'max-w-md w-full',
-    md: 'max-w-2xl w-full',
-    lg: 'max-w-4xl w-full',
-    xl: 'max-w-6xl w-full'
+    sm: 'max-w-md',
+    md: 'max-w-2xl',
+    lg: 'max-w-4xl',
+    xl: 'max-w-6xl'
   };
 
   return `${base} ${sizes[props.size]}`;

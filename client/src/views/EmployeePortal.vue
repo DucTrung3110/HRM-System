@@ -19,7 +19,7 @@
     <template v-else>
       <!-- Personal Info Card -->
       <BaseCard>
-        <div class="flex items-center gap-6">
+        <div class="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-6">
           <div class="w-20 h-20 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold flex-shrink-0">
             {{ getInitials(currentEmployee.full_name) }}
           </div>
@@ -62,9 +62,9 @@
       <!-- ===== ATTENDANCE TAB ===== -->
       <div v-if="activeTab === 'attendance'">
         <BaseCard>
-          <div class="flex items-center justify-between mb-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <h3 class="text-lg font-bold text-foreground">Tổng quan Điểm danh</h3>
-            <BaseButton @click="handleCheckIn" :disabled="checkInLoading" class="shadow-sm">
+            <BaseButton @click="handleCheckIn" :disabled="checkInLoading" class="shadow-sm w-full sm:w-auto">
               <svg class="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -150,9 +150,9 @@
           </div>
 
           <div>
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
               <h3 class="font-semibold">Yêu cầu gần đây</h3>
-              <BaseButton @click="showLeaveModal = true">+ Tạo yêu cầu</BaseButton>
+              <BaseButton @click="showLeaveModal = true" class="w-full sm:w-auto">+ Tạo yêu cầu</BaseButton>
             </div>
             <div v-if="leaveRequests.length === 0" class="text-center py-8 text-muted-foreground">Chưa có yêu cầu nghỉ phép nào</div>
             <BaseTable
@@ -191,9 +191,9 @@
       <div v-if="activeTab === 'salary'">
         <BaseCard>
           <div class="space-y-4">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <h3 class="font-semibold">Thông tin lương</h3>
-              <div class="flex gap-2" v-if="salaryDetails.length > 0">
+              <div class="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end" v-if="salaryDetails.length > 0">
                 <button
                   @click="exportSalaryExcel"
                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"

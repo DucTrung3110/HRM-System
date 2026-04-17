@@ -1,12 +1,13 @@
 <template>
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div>
-        <h1 class="text-3xl font-bold text-foreground">Quản lý Nhân viên</h1>
-        <p class="text-muted-foreground mt-1">Danh sách và quản lý thông tin nhân viên</p>
+        <h1 class="text-2xl sm:text-3xl font-bold text-foreground">Quản lý Nhân viên</h1>
+        <p class="text-sm sm:text-base text-muted-foreground mt-1">Danh sách và phân loại nhân viên</p>
       </div>
       <BaseButton
         @click="openCreateModal"
+        class="w-full sm:w-auto"
         data-testid="button-create-employee"
       >
         + Thêm nhân viên
@@ -24,7 +25,7 @@
 
     <template v-else>
       <BaseCard>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <BaseInput
             v-model="filters.search"
             placeholder="Tìm kiếm theo tên, mã NV..."
@@ -50,7 +51,7 @@
         </div>
       </BaseCard>
 
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
         <BaseCard class="p-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -237,12 +238,12 @@
       </div>
 
       <template #footer>
-        <div class="flex justify-between w-full">
-          <BaseButton variant="outline" @click="closeModal" :disabled="saving">Hủy bỏ</BaseButton>
-          <div class="flex gap-2">
-            <BaseButton variant="outline" @click="currentStep--" v-if="currentStep > 1" :disabled="saving">Quay lại</BaseButton>
-            <BaseButton @click="handleNextStep" v-if="currentStep < 3">Tiếp tục</BaseButton>
-            <BaseButton @click="handleSubmit" v-if="currentStep === 3" :disabled="saving">
+        <div class="flex flex-col-reverse sm:flex-row justify-between w-full gap-3 sm:gap-0">
+          <BaseButton variant="outline" @click="closeModal" :disabled="saving" class="w-full sm:w-auto">Hủy bỏ</BaseButton>
+          <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <BaseButton variant="outline" @click="currentStep--" v-if="currentStep > 1" :disabled="saving" class="w-full sm:w-auto">Quay lại</BaseButton>
+            <BaseButton @click="handleNextStep" v-if="currentStep < 3" class="w-full sm:w-auto">Tiếp tục</BaseButton>
+            <BaseButton @click="handleSubmit" v-if="currentStep === 3" :disabled="saving" class="w-full sm:w-auto">
               {{ saving ? 'Đang lưu...' : (isEditing ? 'Cập nhật' : 'Tạo mới') }}
             </BaseButton>
           </div>
