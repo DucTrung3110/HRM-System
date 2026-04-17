@@ -15,7 +15,7 @@ export const employeeService = {
   },
 
   // Create new employee
-  // IMPORTANT: Laravel backend requires employment data nested in 'employment' object
+  create: async (data) => {
     // Backend is Express + Drizzle, which expects flattened fields
     let payload = { ...data };
     
