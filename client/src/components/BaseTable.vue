@@ -44,7 +44,7 @@
             >
               <div class="flex items-center justify-between md:justify-center w-full">
                 <span class="text-xs font-semibold text-muted-foreground uppercase shrink-0 md:hidden">Thao tác</span>
-                <div class="flex justify-end gap-2 md:w-full">
+                <div class="flex justify-end md:justify-center gap-2 md:w-full">
                   <slot name="actions" :item="item" />
                 </div>
               </div>
