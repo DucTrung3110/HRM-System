@@ -563,7 +563,7 @@ const loadLeaveData = async (empId) => {
   try {
     const [balancesRes, requestsRes, typesRes] = await Promise.all([
       axiosClient.get(`/employees/${empId}/leave-balances`).catch(() => ({ data: [] })),
-      axiosClient.get('/leave-requests', { params: { employee_id: empId } }).catch(() => ({ data: [] })),
+      axiosClient.get('/leaves', { params: { employee_id: empId } }).catch(() => ({ data: [] })),
       axiosClient.get('/leave-types').catch(() => ({ data: [] })),
     ]);
     leaveBalances.value = balancesRes.data?.data || balancesRes.data || [];

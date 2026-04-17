@@ -384,7 +384,7 @@ const navGroupsData = ref([
     isOpen: true,
     items: [
       { path: '/employees', name: 'employees', label: 'Nhân viên', icon: IconUser, adminOnly: true },
-      { path: '/employment-history', name: 'employment-history', label: 'Lịch sử công', icon: IconUser, adminOnly: true },
+      { path: '/employment-history', name: 'employment-history', label: 'Lịch sử công tác', icon: IconUser, adminOnly: true },
       { path: '/departments', name: 'departments', label: 'Phòng ban', icon: IconBuilding, adminOnly: true },
       { path: '/roles', name: 'roles', label: 'Vai trò', icon: IconShield, adminOnly: true },
     ]

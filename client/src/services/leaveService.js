@@ -12,12 +12,12 @@ export const leaveService = {
   },
 
   getRequests: async (params) => {
-    const response = await axiosClient.get('/leave-requests', { params });
+    const response = await axiosClient.get('/leaves', { params });
     return response.data;
   },
 
   createRequest: async (data) => {
-    const response = await axiosClient.post('/leave-requests', {
+    const response = await axiosClient.post('/leaves', {
       employee_id: data.employee_id,
       leave_type_id: data.leave_type_id,
       start_date: data.start_date,
@@ -30,12 +30,12 @@ export const leaveService = {
   },
 
   updateRequest: async (id, data) => {
-    const response = await axiosClient.patch(`/leave-requests/${id}`, data);
+    const response = await axiosClient.patch(`/leaves/${id}`, data);
     return response.data;
   },
 
   approveRequest: async (id, approved_by) => {
-    const response = await axiosClient.patch(`/leave-requests/${id}`, {
+    const response = await axiosClient.patch(`/leaves/${id}`, {
       status: 'approved',
       approved_by: approved_by,
       approved_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
@@ -44,7 +44,7 @@ export const leaveService = {
   },
 
   rejectRequest: async (id, approved_by) => {
-    const response = await axiosClient.patch(`/leave-requests/${id}`, {
+    const response = await axiosClient.patch(`/leaves/${id}`, {
       status: 'rejected',
       approved_by: approved_by,
       approved_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
