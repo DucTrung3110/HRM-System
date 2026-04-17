@@ -30,24 +30,20 @@ export const leaveService = {
   },
 
   updateRequest: async (id, data) => {
-    const response = await axiosClient.patch(`/leaves/${id}`, data);
+    const response = await axiosClient.put(`/leaves/${id}`, data);
     return response.data;
   },
 
   approveRequest: async (id, approved_by) => {
-    const response = await axiosClient.patch(`/leaves/${id}`, {
-      status: 'approved',
-      approved_by: approved_by,
-      approved_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    const response = await axiosClient.put(`/leaves/${id}/approve`, {
+      approved_by: approved_by
     });
     return response.data;
   },
 
   rejectRequest: async (id, approved_by) => {
-    const response = await axiosClient.patch(`/leaves/${id}`, {
-      status: 'rejected',
-      approved_by: approved_by,
-      approved_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+    const response = await axiosClient.put(`/leaves/${id}/reject`, {
+      approved_by: approved_by
     });
     return response.data;
   }
