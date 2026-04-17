@@ -5,27 +5,51 @@
         <h1 class="text-3xl font-bold text-foreground">{{ isAdmin ? 'Quản lý Lương' : 'Phiếu lương của tôi' }}</h1>
         <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Cấu trúc và thành phần lương nhân viên' : 'Xem chi tiết lương cá nhân' }}</p>
       </div>
-      <div class="flex gap-2" v-if="salaryComponents.length > 0 && (selectedEmployee || !isAdmin)">
-        <button
-          @click="exportSalaryExcel"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
-          title="Xuất Excel"
-        >
-          <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Excel
-        </button>
-        <button
-          @click="exportSalaryPDF"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
-          title="Xuất PDF"
-        >
-          <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-          </svg>
-          PDF
-        </button>
+      <div class="flex gap-2 items-center">
+        <!-- Single Export (only visible when a specific user or month is loaded) -->
+        <template v-if="salaryComponents.length > 0 && (selectedEmployee || !isAdmin)">
+          <button
+            @click="exportSalaryExcel"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+            title="Xuất Excel"
+          >
+            <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Excel (Cá nhân)
+          </button>
+          <button
+            @click="exportSalaryPDF"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+            title="Xuất PDF"
+          >
+            <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            PDF (Cá nhân)
+          </button>
+        </template>
+        
+        <!-- Bulk Export (Admin only) -->
+        <template v-if="isAdmin">
+          <div class="w-px h-6 bg-border mx-1"></div>
+          <button
+            @click="bulkExportExcel"
+            :disabled="bulkExportLoading"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-medium hover:bg-green-100 transition-colors disabled:opacity-50"
+            title="Xuất Bảng Lương Tập Thể"
+          >
+            Excel (Tất cả)
+          </button>
+          <button
+            @click="bulkExportPDF"
+            :disabled="bulkExportLoading"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
+            title="In Phiếu Lương Tập Thể"
+          >
+            PDF (Tất cả)
+          </button>
+        </template>
       </div>
     </div>
     
@@ -207,6 +231,8 @@ const salaryComponents = ref([]);
 const history = ref([]);
 const employeeOptions = ref([{ label: 'Chọn nhân viên', value: '' }]);
 
+const bulkExportLoading = ref(false);
+
 const earnings = computed(() => {
   return salaryComponents.value.filter(s => s.type === 'earning');
 });
@@ -280,13 +306,26 @@ const exportSalaryExcel = () => {
       ...earnings.value.map(i => [i.component_name || i.name, 'Khoản thu', Number(i.amount || 0)]),
       ...deductions.value.map(i => [i.component_name || i.name, 'Khấu trừ', -Number(i.amount || 0)]),
       [],
-      ['Tổng thu nhập', '', summary.value.totalEarnings],
-      ['Tổng khấu trừ', '', -summary.value.totalDeductions],
-      ['LƯƠNG THỰC LĨNH', '', summary.value.netSalary],
+      ['Tổng thu nhập', '(Tổng)', summary.value.totalEarnings],
+      ['Tổng khấu trừ', '(Tổng)', -summary.value.totalDeductions],
+      ['LƯƠNG THỰC LĨNH', '(Thực nhận)', summary.value.netSalary],
     ];
 
     // Build the workbook
     const ws = XLSX.utils.aoa_to_sheet(data);
+    
+    // Add professional formatting
+    ws['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 25 }]; // Set column widths
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }]; // Merge Title A1:C1
+    
+    // Auto-format numbers with thousands separators
+    Object.keys(ws).forEach(key => {
+      if (key.startsWith('!')) return;
+      if (typeof ws[key].v === 'number') {
+        ws[key].z = '#,##0';
+      }
+    });
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "PhieuLuong");
 
@@ -382,6 +421,223 @@ const exportSalaryPDF = () => {
   const url = URL.createObjectURL(blob);
   const w = window.open(url, '_blank', 'width=800,height=900');
   if (w) w.addEventListener('unload', () => URL.revokeObjectURL(url));
+};
+
+// ── Bulk Exports ──
+const bulkExportExcel = async () => {
+  if (!isAdmin.value) return;
+  try {
+    notificationStore.addInfo('Đang tổng hợp lương toàn công ty...');
+    bulkExportLoading.value = true;
+    
+    const empRes = await employeeService.getAll();
+    const employeesList = empRes?.data || empRes || [];
+    
+    // Create master headers
+    const data = [
+      ['BẢNG LƯƠNG TỔNG HỢP NHÂN VIÊN'],
+      ['Tháng', selectedMonth.value || 'N/A'],
+      ['Ngày xuất', new Date().toLocaleDateString('vi-VN')],
+      [],
+      ['STT', 'Mã NV', 'Họ tên', 'Phòng ban', 'Chức vụ', 'Tổng Lương CB', 'Tổng Phụ Cấp', 'Khấu Trừ', 'Lương Thực Lĩnh']
+    ];
+    
+    // Process all employees
+    for (let i = 0; i < employeesList.length; i++) {
+        const emp = employeesList[i];
+        let salaries = [];
+        try {
+            const salRes = await employeeService.getSalaries(emp.id);
+            salaries = salRes?.data || salRes || [];
+        } catch (e) { }
+        
+        let basic = 0;
+        let allowance = 0;
+        let deductions = 0;
+        
+        salaries.forEach(item => {
+            const amt = Number(item.amount) || 0;
+            if (item.type === 'deduction' || item.category === 'deduction') {
+                deductions += amt;
+            } else {
+                const name = (item.component_name || item.name || '').toLowerCase();
+                const cat = (item.category || '').toLowerCase();
+                if (name.includes('cơ bản') || name.includes('co ban') || cat === 'basic') {
+                    basic += amt;
+                } else {
+                    allowance += amt;
+                }
+            }
+        });
+        
+        const net = basic + allowance - deductions;
+        if (salaries.length > 0 || net > 0) { 
+            data.push([
+                data.length - 4, // STT 
+                emp.code || emp.employee_code || '-',
+                emp.full_name || '-',
+                emp.employment?.department_name || emp.department || emp.department_name || '-',
+                emp.employment?.job_title_name || emp.job_title || emp.job_title_name || '-',
+                basic,
+                allowance,
+                -deductions,
+                net
+            ]);
+        }
+    }
+    
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    
+    ws['!cols'] = [
+        { wch: 5 },  // STT
+        { wch: 15 }, // Code
+        { wch: 25 }, // Name
+        { wch: 20 }, // Dept
+        { wch: 20 }, // Job
+        { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 20 } // Money columns
+    ];
+    ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }
+    ];
+    
+    Object.keys(ws).forEach(key => {
+      if (key.startsWith('!')) return;
+      if (typeof ws[key].v === 'number' && parseInt(key.replace(/[^\d]/g, '')) > 4) {
+        ws[key].z = '#,##0';
+      }
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "BangLuongTongHop");
+    
+    const dateStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `BangLuong_TongHop_${dateStr}.xlsx`);
+    
+    notificationStore.addSuccess('Xuất bảng lương tổng hợp thành công!');
+  } catch (err) {
+    console.error('Bulk excel export error:', err);
+    notificationStore.addError('Lỗi xuất file hàng loạt: ' + (err.message || 'Unknown error'));
+  } finally {
+    bulkExportLoading.value = false;
+  }
+};
+
+const bulkExportPDF = async () => {
+  if (!isAdmin.value) return;
+  try {
+    notificationStore.addInfo('Đang khởi tạo bản in Toàn công ty...');
+    bulkExportLoading.value = true;
+    
+    const empRes = await employeeService.getAll();
+    const employeesList = empRes?.data || empRes || [];
+    const exportDate = new Date().toLocaleDateString('vi-VN');
+    const fmt = (n) => Number(n).toLocaleString('vi-VN') + ' ₫';
+    
+    let allPagesHTML = '';
+    
+    for (const emp of employeesList) {
+        let salaries = [];
+        try {
+            const salRes = await employeeService.getSalaries(emp.id);
+            salaries = salRes?.data || salRes || [];
+        } catch (e) { }
+        
+        let basic = 0, allowance = 0, deductions = 0;
+        let earningRows = '', deductionRows = '';
+        
+        salaries.forEach(item => {
+            const amt = Number(item.amount) || 0;
+            const name = item.component_name || item.name || '';
+            if (item.type === 'deduction' || item.category === 'deduction') {
+                deductions += amt;
+                deductionRows += `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${name}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;font-weight:600">-${fmt(amt)}</td></tr>`;
+            } else {
+                basic += amt; // Simplified mapping for UI loop
+                earningRows += `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${name}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#16a34a;font-weight:600">+${fmt(amt)}</td></tr>`;
+            }
+        });
+        
+        const net = basic - deductions;
+        
+        if (salaries.length === 0 && net === 0) continue; // skip zero salaries
+        
+        allPagesHTML += `
+        <div class="page">
+          <div class="header">
+            <div>
+              <div class="company">CODEDENNGU</div>
+              <div style="font-size:12px;color:#6b7280;margin-top:4px">Hệ thống Quản lý Nhân sự</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:20px;font-weight:700">PHIẾU LƯƠNG</div>
+              <div style="font-size:12px;color:#6b7280">Tháng: ${selectedMonth.value || 'N/A'} | Xuất: ${exportDate}</div>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item"><label>Họ và tên</label><span>${emp.full_name}</span></div>
+            <div class="info-item"><label>Mã nhân viên</label><span>${emp.code || emp.employee_code || '-'}</span></div>
+            <div class="info-item"><label>Phòng ban</label><span>${emp.employment?.department_name || emp.department || emp.department_name || '-'}</span></div>
+            <div class="info-item"><label>Chức vụ</label><span>${emp.employment?.job_title_name || emp.job_title || emp.job_title_name || '-'}</span></div>
+          </div>
+          <h4>Thu nhập</h4>
+          <table><thead><tr><th>Khoản mục</th><th style="text-align:right">Số tiền</th></tr></thead><tbody>${earningRows}</tbody></table>
+          <h4>Khấu trừ</h4>
+          <table><thead><tr><th>Khoản mục</th><th style="text-align:right">Số tiền</th></tr></thead><tbody>${deductionRows}</tbody></table>
+          <div class="summary">
+            <div class="summary-row"><span>Tổng thu nhập</span><span style="color:#16a34a">${fmt(basic)}</span></div>
+            <div class="summary-row"><span>Tổng khấu trừ</span><span style="color:#dc2626">- ${fmt(deductions)}</span></div>
+            <div class="summary-row net"><span>Lương thực lĩnh</span><span>${fmt(net)}</span></div>
+          </div>
+          <div class="footer"><p>Phiếu lương tự động — ${exportDate}</p></div>
+        </div>`;
+    }
+    
+    if (!allPagesHTML) {
+        notificationStore.addError('Không có dữ liệu lương của bất kỳ nhân viên nào mảng này!');
+        return;
+    }
+    
+    const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Phiếu lương tổng hợp - ${selectedMonth.value || 'N/A'}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#111827;background:#fff}
+    .page{max-width:700px;margin:0 auto;padding:40px 32px; page-break-after: always;}
+    .page:last-child { page-break-after: avoid; }
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #2563eb;padding-bottom:20px}
+    .company{font-size:22px;font-weight:800;color:#2563eb}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 32px;margin-bottom:24px;padding:20px;background:#f9fafb;border-radius:10px}
+    .info-item label{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px}
+    .info-item span{font-size:14px;font-weight:600}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px}
+    thead th{background:#f3f4f6;padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;color:#6b7280}
+    thead th:last-child{text-align:right}
+    h4{font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #e5e7eb}
+    .summary{background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:16px 20px}
+    .summary-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;color:#374151}
+    .summary-row.net{border-top:1px solid #93c5fd;margin-top:10px;padding-top:10px;font-size:16px;font-weight:800;color:#1d4ed8}
+    .footer{text-align:center;margin-top:32px;font-size:11px;color:#9ca3af}
+    @media print{.page{padding:20px;margin:0;box-shadow:none}}
+  </style>
+</head>
+<body>${allPagesHTML}<script>window.onload = () => window.print();<\/script></body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    if (w) w.addEventListener('unload', () => URL.revokeObjectURL(url));
+  } catch (err) {
+    console.error('Bulk pdf export error:', err);
+    notificationStore.addError('Lỗi tải tệp PDF hàng loạt!');
+  } finally {
+    bulkExportLoading.value = false;
+  }
 };
 
 const loadSalary = async () => {

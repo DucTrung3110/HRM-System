@@ -696,6 +696,19 @@ const exportSalaryExcel = () => {
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(data);
+    
+    // Add professional formatting
+    ws['!cols'] = [{ wch: 35 }, { wch: 20 }, { wch: 25 }]; // Set column widths
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }]; // Merge Title A1:C1
+    
+    // Auto-format numbers with thousands separators
+    Object.keys(ws).forEach(key => {
+      if (key.startsWith('!')) return;
+      if (typeof ws[key].v === 'number') {
+        ws[key].z = '#,##0';
+      }
+    });
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "PhieuLuong");
 
