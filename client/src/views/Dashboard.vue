@@ -10,6 +10,14 @@
       <p class="text-muted-foreground">Đang tải dữ liệu từ API...</p>
     </div>
 
+    <!-- Mock Data Warning -->
+    <div v-if="!loading && usingMockData" class="flex items-center gap-3 px-4 py-3 bg-warning/10 border border-warning/30 rounded-lg text-sm text-warning-foreground">
+      <svg class="w-5 h-5 flex-shrink-0 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <span><strong>API không khả dụng</strong> — Dashboard đang hiển thị dữ liệu mẫu. Vui lòng kiểm tra kết nối server.</span>
+    </div>
+
     <!-- Quick Actions -->
     <div v-if="!loading" class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
       <BaseCard hoverable @click="$router.push('/attendance')" class="p-4 flex flex-col items-center justify-center cursor-pointer group bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors py-6">
@@ -157,6 +165,7 @@ const activitiesLoading = ref(true);
 const activities = ref([]);
 const attendanceRecords = ref([]);
 const leaveRequests = ref([]);
+const usingMockData = ref(false);
 
 const stats = ref({
   totalEmployees: 0,
@@ -459,36 +468,39 @@ async function fetchAttendance() {
 onMounted(async () => {
   try {
     loading.value = true;
-    
-    generateMockData();
-    
+    usingMockData.value = false;
+
     try {
       const [employeesRes, departmentsRes] = await Promise.all([
         employeeService.getAll(),
         departmentService.getAll()
       ]);
-      
+
       const employees = employeesRes?.data || employeesRes || [];
       const departments = departmentsRes?.data || departmentsRes || [];
-      
+
       if (Array.isArray(employees) && employees.length > 0) {
         stats.value.totalEmployees = employees.length;
       }
       if (Array.isArray(departments) && departments.length > 0) {
         stats.value.activeDepartments = departments.length;
       }
-      
+
       await Promise.all([
         fetchLeaveRequests(),
         fetchAttendance(),
         fetchActivities()
       ]);
     } catch (apiError) {
-      console.log('API unavailable, using mock data');
+      console.warn('API unavailable, falling back to mock data:', apiError.message);
+      generateMockData();
+      usingMockData.value = true;
     }
-    
+
   } catch (err) {
     console.error('Dashboard Error:', err);
+    generateMockData();
+    usingMockData.value = true;
   } finally {
     loading.value = false;
     activitiesLoading.value = false;

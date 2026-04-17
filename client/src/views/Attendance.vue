@@ -12,25 +12,26 @@
         <BaseCard>
           <div class="text-center">
             <p class="text-sm text-muted-foreground">Có mặt</p>
-            <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{{ todaySummary.present }}</p>
+            <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">{{ recordsSummary.present }}</p>
+            <p class="text-xs text-muted-foreground mt-1">{{ recordsSummary.total }} bản ghi</p>
           </div>
         </BaseCard>
         <BaseCard>
           <div class="text-center">
             <p class="text-sm text-muted-foreground">Vắng mặt</p>
-            <p class="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">{{ todaySummary.absent }}</p>
+            <p class="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">{{ recordsSummary.absent }}</p>
           </div>
         </BaseCard>
         <BaseCard>
           <div class="text-center">
             <p class="text-sm text-muted-foreground">Đi muộn</p>
-            <p class="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-2">{{ todaySummary.late }}</p>
+            <p class="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-2">{{ recordsSummary.late }}</p>
           </div>
         </BaseCard>
         <BaseCard>
           <div class="text-center">
             <p class="text-sm text-muted-foreground">Nửa ngày</p>
-            <p class="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">{{ todaySummary.halfDay }}</p>
+            <p class="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">{{ recordsSummary.halfDay }}</p>
           </div>
         </BaseCard>
       </div>
@@ -50,18 +51,52 @@
             <p class="text-sm text-muted-foreground">{{ currentDate }}</p>
           </div>
         </div>
-        
+
         <div class="flex flex-col items-center gap-3">
-          <BaseButton 
-            @click="handleSelfCheckIn" 
-            :disabled="clockProcessing"
-            class="px-8 py-4 text-lg bg-green-600 hover:bg-green-700 text-white"
-          >
-            <svg class="w-6 h-6 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-            </svg>
-            {{ clockProcessing ? 'Đang xử lý...' : 'CHECK IN' }}
-          </BaseButton>
+          <!-- State: Not yet checked in -->
+          <template v-if="todayClockState === 'none'">
+            <BaseButton
+              @click="handleSelfCheckIn"
+              :disabled="clockProcessing"
+              class="px-8 py-4 text-lg bg-green-600 hover:bg-green-700 text-white"
+            >
+              <svg class="w-6 h-6 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+              {{ clockProcessing ? 'Đang xử lý...' : 'CHECK IN' }}
+            </BaseButton>
+            <p class="text-xs text-muted-foreground">Bạn chưa chấm công hôm nay</p>
+          </template>
+
+          <!-- State: Checked in, not yet checked out -->
+          <template v-else-if="todayClockState === 'checked-in'">
+            <p class="text-sm text-success font-medium">✓ Đã vào: {{ formatTime(todayRecord?.check_in_time) }}</p>
+            <BaseButton
+              @click="handleSelfCheckOut"
+              :disabled="clockProcessing"
+              class="px-8 py-4 text-lg bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <svg class="w-6 h-6 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              {{ clockProcessing ? 'Đang xử lý...' : 'CHECK OUT' }}
+            </BaseButton>
+          </template>
+
+          <!-- State: Fully done -->
+          <template v-else>
+            <div class="text-center">
+              <div class="w-14 h-14 rounded-full bg-success/20 flex items-center justify-center mx-auto mb-2">
+                <svg class="w-7 h-7 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <p class="text-sm font-semibold text-success">Đã hoàn thành hôm nay</p>
+              <p class="text-xs text-muted-foreground mt-1">
+                {{ formatTime(todayRecord?.check_in_time) }} → {{ formatTime(todayRecord?.check_out_time) }}
+              </p>
+            </div>
+          </template>
         </div>
       </div>
     </BaseCard>
@@ -117,16 +152,16 @@
         <template v-if="isAdmin" #cell-employee="{ item }">
           <div class="flex items-center gap-2">
             <div class="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
-              {{ getInitials(item.full_name) }}
+              {{ getInitials(item.full_name || item.employee_name) }}
             </div>
             <div>
-              <span class="font-medium">{{ item.full_name || `NV #${item.employee_id}` }}</span>
+              <span class="font-medium">{{ item.full_name || item.employee_name || `NV #${item.employee_id}` }}</span>
               <p class="text-xs text-muted-foreground">{{ item.employee_code || '' }}</p>
             </div>
           </div>
         </template>
         
-        <template #cell-record_date="{ value }">
+        <template #cell-attendance_date="{ value }">
           <span class="text-sm">{{ formatDate(value) }}</span>
         </template>
         
@@ -248,11 +283,46 @@ const updateClock = () => {
   currentDate.value = now.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 };
 
-const todaySummary = ref({
-  present: 142,
-  absent: 8,
-  late: 6,
-  halfDay: 3
+// Summary of ALL currently visible records (for admin overview)
+const recordsSummary = computed(() => ({
+  total: records.value.length,
+  present: records.value.filter(r => r.status === 'present').length,
+  absent:  records.value.filter(r => r.status === 'absent').length,
+  late:    records.value.filter(r => r.status === 'late').length,
+  halfDay: records.value.filter(r => r.status === 'half_day').length,
+}));
+
+// Today summary (for employee clock widget)
+const todaySummary = computed(() => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayRecords = records.value.filter(r => {
+    const d = r.attendance_date || r.record_date || '';
+    return String(d).startsWith(todayStr);
+  });
+  return {
+    present: todayRecords.filter(r => r.status === 'present').length,
+    absent:  todayRecords.filter(r => r.status === 'absent').length,
+    late:    todayRecords.filter(r => r.status === 'late').length,
+    halfDay: todayRecords.filter(r => r.status === 'half_day').length,
+  };
+});
+
+// Today's clock state for employee
+const todayRecord = computed(() => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  return records.value.find(r => {
+    const d = String(r.attendance_date || r.record_date || '');
+    return d.startsWith(todayStr);
+  }) || null;
+});
+
+const todayClockState = computed(() => {
+  const rec = todayRecord.value;
+  if (!rec) return 'none';
+  if (rec.check_in_time && !rec.check_out_time) return 'checked-in';
+  if (rec.check_in_time && rec.check_out_time) return 'done';
+  return 'none';
 });
 
 const filters = ref({
@@ -271,7 +341,7 @@ const editForm = ref({
 
 const adminColumns = [
   { key: 'employee', label: 'Nhân viên' },
-  { key: 'record_date', label: 'Ngày' },
+  { key: 'attendance_date', label: 'Ngày' },
   { key: 'check_in_time', label: 'Giờ vào' },
   { key: 'check_out_time', label: 'Giờ ra' },
   { key: 'total_work_hours', label: 'Tổng giờ' },
@@ -279,7 +349,7 @@ const adminColumns = [
 ];
 
 const employeeColumns = [
-  { key: 'record_date', label: 'Ngày' },
+  { key: 'attendance_date', label: 'Ngày' },
   { key: 'check_in_time', label: 'Giờ vào' },
   { key: 'check_out_time', label: 'Giờ ra' },
   { key: 'total_work_hours', label: 'Tổng giờ' },
@@ -326,7 +396,21 @@ const formatDate = (date) => {
 
 const formatTime = (time) => {
   if (!time) return '-';
-  return new Date(time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const s = String(time);
+  // Plain time string: "08:42:00" or "08:42" — no timezone info, return directly
+  if (/^\d{2}:\d{2}/.test(s)) {
+    return s.slice(0, 5);
+  }
+  // ISO datetime: force display in Vietnam time regardless of browser locale
+  const d = new Date(s);
+  if (!isNaN(d)) {
+    return d.toLocaleTimeString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'Asia/Ho_Chi_Minh',
+    });
+  }
+  return s;
 };
 
 const getStatusVariant = (status) => {
@@ -364,21 +448,76 @@ const openEditModal = (record) => {
 };
 
 const handleSelfCheckIn = async () => {
+  if (clockProcessing.value) return;
   clockProcessing.value = true;
-  setTimeout(() => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    // Find employee id from employees list
+    let empId = user.employee_id || null;
+    if (!empId && employees.value.length > 0) {
+      const me = employees.value.find(e => String(e.user_id) === String(user.id));
+      if (me) empId = me.id;
+    }
+    if (!empId) {
+      toast.error('Không tìm thấy mã nhân viên. Vui lòng liên hệ HR.');
+      return;
+    }
+    await attendanceService.checkIn(empId);
     toast.success('Check-in thành công!');
+    await loadData();
+  } catch (err) {
+    const msg = err.response?.data?.error || 'Lỗi chấm công';
+    if (msg.includes('Already checked in')) {
+      toast.error('Bạn đã chấm công hôm nay rồi!');
+    } else {
+      toast.error(msg);
+    }
+  } finally {
     clockProcessing.value = false;
-  }, 1000);
+  }
+};
+const handleSelfCheckOut = async () => {
+  if (clockProcessing.value) return;
+  clockProcessing.value = true;
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    let empId = user.employee_id || null;
+    if (!empId && employees.value.length > 0) {
+      const me = employees.value.find(e => String(e.user_id) === String(user.id));
+      if (me) empId = me.id;
+    }
+    if (!empId) {
+      toast.error('Không tìm thấy mã nhân viên.');
+      return;
+    }
+    await attendanceService.checkOut(empId);
+    toast.success('Check-out thành công!');
+    await loadData();
+  } catch (err) {
+    toast.error(err.response?.data?.error || 'Lỗi check-out');
+  } finally {
+    clockProcessing.value = false;
+  }
 };
 
 const handleUpdate = async () => {
-  toast.success('Cập nhật thành công!');
-  showEditModal.value = false;
-  editingRecord.value = null;
+  if (!editingRecord.value) return;
+  try {
+    await attendanceService.update(editingRecord.value.id, {
+      ...editingRecord.value,
+      ...editForm.value,
+    });
+    toast.success('Cập nhật thành công!');
+    showEditModal.value = false;
+    editingRecord.value = null;
+    await loadData();
+  } catch (err) {
+    toast.error(err.response?.data?.error || 'Cập nhật thất bại');
+  }
 };
 
 const applyFilters = async () => {
-  toast.info('Đã áp dụng bộ lọc');
+  await loadData();
 };
 
 const generateMockData = () => {
@@ -441,33 +580,51 @@ const generateMockData = () => {
 const loadData = async () => {
   try {
     loading.value = true;
-    
-    generateMockData();
-    
+
+    const params = {};
+    if (filters.value.startDate) params.from = filters.value.startDate;
+    if (filters.value.endDate) params.to = filters.value.endDate;
+    if (filters.value.employee_id) params.employee_id = filters.value.employee_id;
+
     try {
-      const params = {};
-      if (filters.value.startDate) params.from = filters.value.startDate;
-      if (filters.value.endDate) params.to = filters.value.endDate;
-      if (filters.value.employee_id) params.employee_id = filters.value.employee_id;
-      
       const [attendanceData, employeesData] = await Promise.all([
         attendanceService.getRecords(params),
         employeeService.getAll()
       ]);
-      
-      if (Array.isArray(attendanceData) && attendanceData.length > 0) {
-        records.value = attendanceData;
+
+      // API returns array directly
+      const rawRecords = Array.isArray(attendanceData)
+        ? attendanceData
+        : (attendanceData?.data || []);
+
+      if (rawRecords.length > 0) {
+        // Normalize: ensure both attendance_date and record_date exist
+        records.value = rawRecords.map(r => ({
+          ...r,
+          attendance_date: r.attendance_date || r.record_date,
+          record_date: r.record_date || r.attendance_date,
+          // employee_name comes from the JOIN; also expose as full_name
+          full_name: r.full_name || r.employee_name,
+          employee_name: r.employee_name || r.full_name,
+        }));
+      } else {
+        records.value = [];
       }
-      
-      if (Array.isArray(employeesData) && employeesData.length > 0) {
-        employees.value = employeesData;
+
+      const rawEmployees = Array.isArray(employeesData)
+        ? employeesData
+        : (employeesData?.data || []);
+      if (rawEmployees.length > 0) {
+        employees.value = rawEmployees;
       }
     } catch (apiError) {
-      console.log('API unavailable, using mock data');
+      console.warn('Attendance API error, using mock data:', apiError.message);
+      generateMockData();
     }
-    
+
   } catch (err) {
-    console.error('Error loading data:', err);
+    console.error('Error loading attendance data:', err);
+    generateMockData();
   } finally {
     loading.value = false;
   }

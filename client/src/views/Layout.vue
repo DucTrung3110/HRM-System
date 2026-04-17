@@ -205,19 +205,79 @@
             </div>
           </div>
 
-          <!-- Logout -->
-          <button 
-            @click="handleLogout"
-            class="p-2 rounded-lg hover-elevate active-elevate-2 text-destructive"
-            data-testid="button-logout"
-            title="Đăng xuất"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          </button>
+          <!-- Avatar Dropdown -->
+          <div class="relative" ref="avatarContainerRef">
+            <button
+              @click="toggleAvatarMenu"
+              class="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold hover:opacity-90 transition-opacity"
+              data-testid="button-avatar"
+              :title="currentUserEmail"
+            >
+              {{ currentUserInitials }}
+            </button>
+
+            <!-- Avatar Dropdown Menu -->
+            <div
+              v-if="isAvatarMenuOpen"
+              class="absolute top-full right-0 mt-2 w-56 bg-background border border-border rounded-lg shadow-lg z-50"
+            >
+              <div class="px-4 py-3 border-b border-border">
+                <p class="text-sm font-medium text-foreground truncate">{{ currentUserEmail }}</p>
+                <p class="text-xs text-muted-foreground mt-0.5">{{ isAdmin ? 'Quản trị viên' : 'Nhân viên' }}</p>
+              </div>
+              <div class="py-1">
+                <button
+                  @click="openChangePassword"
+                  class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left"
+                >
+                  <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  Đổi mật khẩu
+                </button>
+                <button
+                  @click="handleLogout"
+                  class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors text-left"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Đăng xuất
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
+
+      <!-- Change Password Modal -->
+      <div v-if="showChangePasswordModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="showChangePasswordModal = false">
+        <div class="bg-background border border-border rounded-xl shadow-xl w-full max-w-md p-6">
+          <h3 class="text-lg font-bold text-foreground mb-4">Đổi mật khẩu</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-foreground mb-1">Mật khẩu mới <span class="text-destructive">*</span></label>
+              <input v-model="pwForm.newPassword" type="password" class="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring" placeholder="Nhập mật khẩu mới..." />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-foreground mb-1">Xác nhận mật khẩu <span class="text-destructive">*</span></label>
+              <input v-model="pwForm.confirmPassword" type="password" class="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring" placeholder="Nhập lại mật khẩu..." />
+            </div>
+            <div v-if="pwError" class="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <p class="text-destructive text-sm">{{ pwError }}</p>
+            </div>
+            <div v-if="pwSuccess" class="p-3 bg-success/10 border border-success/20 rounded-lg">
+              <p class="text-success text-sm">{{ pwSuccess }}</p>
+            </div>
+          </div>
+          <div class="flex justify-end gap-3 mt-6">
+            <button @click="showChangePasswordModal = false" class="px-4 py-2 rounded-lg border border-border text-foreground hover:bg-muted transition-colors text-sm">Hủy</button>
+            <button @click="submitChangePassword" :disabled="pwLoading" class="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50">
+              {{ pwLoading ? 'Đang lưu...' : 'Đổi mật khẩu' }}
+            </button>
+          </div>
+        </div>
+      </div>
 
       <!-- Page Content -->
       <main class="flex-1 overflow-auto p-4 sm:p-6">
@@ -252,6 +312,23 @@ const searchContainerRef = ref(null);
 
 const isNotificationsOpen = ref(false);
 const notificationContainerRef = ref(null);
+
+// Avatar dropdown
+const isAvatarMenuOpen = ref(false);
+const avatarContainerRef = ref(null);
+const showChangePasswordModal = ref(false);
+const pwForm = ref({ newPassword: '', confirmPassword: '' });
+const pwError = ref('');
+const pwSuccess = ref('');
+const pwLoading = ref(false);
+
+const currentUserEmail = computed(() => authService.getUserEmail() || 'Người dùng');
+const currentUserInitials = computed(() => {
+  const email = currentUserEmail.value;
+  const user = authService.getUser();
+  const name = user?.name || user?.full_name || email;
+  return name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2) || 'U';
+});
 
 const notificationStore = useNotificationStore();
 const storeNotifications = notificationStore.notifications;
@@ -346,11 +423,14 @@ const navGroupsData = ref([
 const filteredGroups = computed(() => {
   if (!isAdmin.value) {
     return [{
-      id: 'dashboard',
-      label: 'Tổng quan',
+      id: 'employee',
+      label: 'Nhân viên',
       isOpen: true,
       items: [
-        { path: '/employee-portal', name: 'employee-portal', label: 'Cổng Portal', icon: IconDashboard, adminOnly: false }
+        { path: '/employee-portal', name: 'employee-portal', label: 'Tổng quan', icon: IconDashboard, adminOnly: false },
+        { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: false },
+        { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: false },
+        { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: false },
       ]
     }];
   }
@@ -436,6 +516,52 @@ const handleClickOutside = (event) => {
   }
   if (notificationContainerRef.value && !notificationContainerRef.value.contains(event.target)) {
     isNotificationsOpen.value = false;
+  }
+  if (avatarContainerRef.value && !avatarContainerRef.value.contains(event.target)) {
+    isAvatarMenuOpen.value = false;
+  }
+};
+
+const toggleAvatarMenu = () => {
+  isAvatarMenuOpen.value = !isAvatarMenuOpen.value;
+  isNotificationsOpen.value = false;
+};
+
+const openChangePassword = () => {
+  isAvatarMenuOpen.value = false;
+  pwForm.value = { newPassword: '', confirmPassword: '' };
+  pwError.value = '';
+  pwSuccess.value = '';
+  showChangePasswordModal.value = true;
+};
+
+const submitChangePassword = async () => {
+  pwError.value = '';
+  pwSuccess.value = '';
+  if (!pwForm.value.newPassword || pwForm.value.newPassword.length < 6) {
+    pwError.value = 'Mật khẩu mới phải có ít nhất 6 ký tự';
+    return;
+  }
+  if (pwForm.value.newPassword !== pwForm.value.confirmPassword) {
+    pwError.value = 'Mật khẩu xác nhận không khớp';
+    return;
+  }
+  const user = authService.getUser();
+  if (!user?.id) {
+    pwError.value = 'Không xác định được người dùng';
+    return;
+  }
+  pwLoading.value = true;
+  try {
+    const axiosModule = await import('../services/axiosClient.js');
+    const axiosClient = axiosModule.default;
+    await axiosClient.patch(`/users/${user.id}`, { password: pwForm.value.newPassword });
+    pwSuccess.value = 'Đổi mật khẩu thành công! Vui lòng đăng nhập lại.';
+    setTimeout(() => { showChangePasswordModal.value = false; authService.logout(); }, 2000);
+  } catch (err) {
+    pwError.value = err.response?.data?.error || 'Đổi mật khẩu thất bại';
+  } finally {
+    pwLoading.value = false;
   }
 };
 

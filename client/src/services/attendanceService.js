@@ -6,18 +6,16 @@ export const attendanceService = {
     return response.data;
   },
 
-  checkIn: async (employee_id, status = 'present') => {
-    const response = await axiosClient.post('/attendance/checkin', {
+  checkIn: async (employee_id) => {
+    const response = await axiosClient.post('/attendance/check-in', {
       employee_id,
-      status
     });
     return response.data;
   },
 
-  checkOut: async (id, status = 'present') => {
-    const response = await axiosClient.post('/attendance/checkout', {
-      id,
-      status
+  checkOut: async (employee_id) => {
+    const response = await axiosClient.post('/attendance/check-out', {
+      employee_id,
     });
     return response.data;
   },

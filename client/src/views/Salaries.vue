@@ -1,8 +1,32 @@
 <template>
   <div class="space-y-6">
-    <div>
-      <h1 class="text-3xl font-bold text-foreground">{{ isAdmin ? 'Quản lý Lương' : 'Phiếu lương của tôi' }}</h1>
-      <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Cấu trúc và thành phần lương nhân viên' : 'Xem chi tiết lương cá nhân' }}</p>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-foreground">{{ isAdmin ? 'Quản lý Lương' : 'Phiếu lương của tôi' }}</h1>
+        <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Cấu trúc và thành phần lương nhân viên' : 'Xem chi tiết lương cá nhân' }}</p>
+      </div>
+      <div class="flex gap-2" v-if="salaryComponents.length > 0 && (selectedEmployee || !isAdmin)">
+        <button
+          @click="exportSalaryExcel"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+          title="Xuất Excel"
+        >
+          <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Excel
+        </button>
+        <button
+          @click="exportSalaryPDF"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-sm font-medium hover:bg-muted transition-colors"
+          title="Xuất PDF"
+        >
+          <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+          </svg>
+          PDF
+        </button>
+      </div>
     </div>
     
     <template v-if="isAdmin">
@@ -169,6 +193,10 @@ import BaseTable from '../components/BaseTable.vue';
 import { salaryService } from '../services/salaryService';
 import { employeeService } from '../services/employeeService';
 import { authService } from '../services/authService';
+import { useNotificationStore } from '../stores/notificationStore';
+import * as XLSX from 'xlsx';
+
+const notificationStore = useNotificationStore();
 
 const isAdmin = computed(() => authService.isAdmin());
 const currentUser = computed(() => authService.getUser());
@@ -222,6 +250,138 @@ const getCategoryLabel = (category) => {
     'tax': 'Thuế'
   };
   return labels[category] || category || '';
+};
+
+// ── Export ──
+const getSelectedEmployeeName = () => {
+  if (!isAdmin.value) return currentUser.value?.full_name || currentUser.value?.email || 'Nhân viên';
+  const opt = employeeOptions.value.find(o => o.value === selectedEmployee.value);
+  return opt ? opt.label.replace(/\s*\(.*\)$/, '') : 'Nhân viên';
+};
+
+// Strip diacritics for safe filenames
+const sanitizeFilename = (str) =>
+  str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s.-]/g, '_').trim();
+
+const exportSalaryExcel = () => {
+  try {
+    const empName = getSelectedEmployeeName();
+    const month = selectedMonth.value || 'N/A';
+    
+    // Create Excel worksheet data array
+    const data = [
+      ['PHIẾU LƯƠNG NHÂN VIÊN'],
+      [],
+      ['Họ tên', empName],
+      ['Tháng', month],
+      ['Ngày xuất', new Date().toLocaleDateString('vi-VN')],
+      [],
+      ['THÀNH PHẦN', 'LOẠI', 'SỐ TIỀN (VNĐ)'],
+      ...earnings.value.map(i => [i.component_name || i.name, 'Khoản thu', Number(i.amount || 0)]),
+      ...deductions.value.map(i => [i.component_name || i.name, 'Khấu trừ', -Number(i.amount || 0)]),
+      [],
+      ['Tổng thu nhập', '', summary.value.totalEarnings],
+      ['Tổng khấu trừ', '', -summary.value.totalDeductions],
+      ['LƯƠNG THỰC LĨNH', '', summary.value.netSalary],
+    ];
+
+    // Build the workbook
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "PhieuLuong");
+
+    // Standard download via XLSX library (handles browser quirks perfectly)
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const fileName = `PhieuLuong_${sanitizeFilename(empName)}_${dateStr}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    notificationStore.addSuccess('Tải xuống Excel thành công!');
+  } catch (err) {
+    console.error('Excel export error:', err);
+    notificationStore.addError('Khong the xuat file: ' + (err.message || 'Unknown error'));
+  }
+};
+
+
+const exportSalaryPDF = () => {
+  const empName = getSelectedEmployeeName();
+  const month = selectedMonth.value || 'N/A';
+  const exportDate = new Date().toLocaleDateString('vi-VN');
+  const fmt = (n) => Number(n).toLocaleString('vi-VN') + ' ₫';
+
+  const earningRows = earnings.value.map(i => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${i.component_name || i.name}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#16a34a;font-weight:600">+${fmt(i.amount)}</td>
+    </tr>`).join('');
+
+  const deductionRows = deductions.value.map(i => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${i.component_name || i.name}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;font-weight:600">-${fmt(i.amount)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Phiếu lương - ${empName} - ${month}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#111827;background:#fff}
+    .page{max-width:700px;margin:0 auto;padding:40px 32px}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #2563eb;padding-bottom:20px}
+    .company{font-size:22px;font-weight:800;color:#2563eb}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 32px;margin-bottom:24px;padding:20px;background:#f9fafb;border-radius:10px}
+    .info-item label{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px}
+    .info-item span{font-size:14px;font-weight:600}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px}
+    thead th{background:#f3f4f6;padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;color:#6b7280}
+    thead th:last-child{text-align:right}
+    h4{font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;padding-bottom:4px;border-bottom:2px solid #e5e7eb}
+    .summary{background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:16px 20px}
+    .summary-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;color:#374151}
+    .summary-row.net{border-top:1px solid #93c5fd;margin-top:10px;padding-top:10px;font-size:16px;font-weight:800;color:#1d4ed8}
+    .footer{text-align:center;margin-top:32px;font-size:11px;color:#9ca3af}
+    @media print{.page{padding:20px}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="company">CODEDENNGU</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:4px">Hệ thống Quản lý Nhân sự</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:20px;font-weight:700">PHIẾU LƯƠNG</div>
+        <div style="font-size:12px;color:#6b7280">Tháng: ${month} | Xuất: ${exportDate}</div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-item"><label>Họ và tên</label><span>${empName}</span></div>
+      <div class="info-item"><label>Tháng lương</label><span>${month}</span></div>
+    </div>
+    <h4>Thu nhập</h4>
+    <table><thead><tr><th>Khoản mục</th><th style="text-align:right">Số tiền</th></tr></thead><tbody>${earningRows}</tbody></table>
+    <h4>Khấu trừ</h4>
+    <table><thead><tr><th>Khoản mục</th><th style="text-align:right">Số tiền</th></tr></thead><tbody>${deductionRows}</tbody></table>
+    <div class="summary">
+      <div class="summary-row"><span>Tổng thu nhập</span><span style="color:#16a34a">${fmt(summary.value.totalEarnings)}</span></div>
+      <div class="summary-row"><span>Tổng khấu trừ</span><span style="color:#dc2626">- ${fmt(summary.value.totalDeductions)}</span></div>
+      <div class="summary-row net"><span>Lương thực lĩnh</span><span>${fmt(summary.value.netSalary)}</span></div>
+    </div>
+    <div class="footer"><p>Phiếu lương được tạo tự động bởi hệ thống HRM — ${exportDate}</p></div>
+  </div>
+  <script>window.onload = () => window.print();<\/script>
+</body>
+</html>`;
+
+  // Use Blob URL to preserve UTF-8 encoding (full Vietnamese support)
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank', 'width=800,height=900');
+  if (w) w.addEventListener('unload', () => URL.revokeObjectURL(url));
 };
 
 const loadSalary = async () => {
