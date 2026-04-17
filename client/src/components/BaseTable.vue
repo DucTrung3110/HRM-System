@@ -1,6 +1,6 @@
 <template>
   <div class="relative w-full md:rounded-lg border-0 md:border md:border-border bg-transparent md:bg-card md:shadow-sm">
-    <div class="w-full md:overflow-x-auto md:overflow-y-hidden max-h-none md:max-h-[calc(100vh-250px)]">
+    <div class="w-full md:overflow-auto max-h-none md:max-h-[calc(100vh-250px)]">
       <table class="w-full border-collapse block md:table whitespace-normal md:whitespace-nowrap min-w-full" :data-testid="testId">
         <thead class="hidden md:table-header-group">
           <tr class="bg-muted">
