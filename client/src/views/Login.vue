@@ -68,7 +68,8 @@ const handleLogin = async () => {
     localStorage.setItem('user_email', email.value);
 
     // Determine role based on email (RBAC)
-    const isAdmin = email.value === ADMIN_EMAIL;
+    const adminRoles = ['R001', 'R020']; // R001 = Super Admin, R020 = HR
+    const isAdmin = email.value === ADMIN_EMAIL || (user && user.roles && user.roles.some(r => adminRoles.includes(r)));
     const role = isAdmin ? 'admin' : 'employee';
     localStorage.setItem('role', JSON.stringify({ code: role }));
     localStorage.setItem('user_role', role);
