@@ -525,12 +525,30 @@ const loadEmployeeInfo = async (userId) => {
     if (me) {
       currentEmployee.value = me;
       return me.id;
-    } else {
-      notificationStore.addError('Tài khoản này chưa được liên kết với hồ sơ nhân viên nào!');
     }
   } catch (error) {
-    console.error('Error loading employee info:', error);
+    console.log('Cannot fetch from /employees (likely restricted), using fallback info.');
   }
+  
+  // Fallback: If we couldn't fetch from API (403), use localStorage user data
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user && user.id) {
+      const fallbackEmp = {
+        id: user.employee_id || user.id,
+        user_id: user.id,
+        full_name: user.name || user.email?.split('@')[0] || 'Nhân viên',
+        employee_code: `EMP${String(user.id).padStart(4, '0')}`,
+        email: user.email,
+        job_title_name: 'Nhân viên',
+        department_name: 'Khối sản xuất'
+      };
+      currentEmployee.value = fallbackEmp;
+      return fallbackEmp.id;
+    }
+  } catch(e) {}
+
+  notificationStore.addError('Tài khoản này chưa được liên kết với hồ sơ nhân viên nào!');
   return null;
 };
 

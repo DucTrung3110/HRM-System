@@ -311,9 +311,11 @@ const todaySummary = computed(() => {
 const todayRecord = computed(() => {
   const todayStr = new Date().toISOString().split('T')[0];
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const userEmpId = user.employee_id || user.id;
+
   return records.value.find(r => {
     const d = String(r.attendance_date || r.record_date || '');
-    return d.startsWith(todayStr);
+    return d.startsWith(todayStr) && String(r.employee_id) === String(userEmpId);
   }) || null;
 });
 
