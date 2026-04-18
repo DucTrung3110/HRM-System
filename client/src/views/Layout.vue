@@ -394,9 +394,9 @@ const navGroupsData = ref([
     label: 'Công & Lịch',
     isOpen: true,
     items: [
-      { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: false },
-      { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: false },
-      { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: false },
+      { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: true },
+      { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: true },
+      { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: true },
       { path: '/work-shifts', name: 'work-shifts', label: 'Ca làm việc', icon: IconClock, adminOnly: true },
     ]
   },
