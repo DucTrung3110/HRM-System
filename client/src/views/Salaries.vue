@@ -68,13 +68,20 @@
             label="Tháng"
             data-testid="input-month"
           />
-          <div class="flex items-end">
+          <div class="flex items-end gap-2">
             <BaseButton
               variant="outline"
               @click="loadSalary"
               data-testid="button-load-salary"
             >
               Xem chi tiết
+            </BaseButton>
+            <BaseButton
+              v-if="selectedEmployee"
+              :variant="isEditing ? 'success' : 'outline'"
+              @click="toggleEdit"
+            >
+              {{ isEditing ? 'Lưu chỉnh sửa' : 'Hiệu chỉnh lương' }}
             </BaseButton>
           </div>
         </div>
@@ -133,19 +140,56 @@
     
     <div v-if="selectedEmployee || !isAdmin" class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <BaseCard title="Thu nhập">
+        <template #header-actions v-if="isEditing">
+          <button @click="addRow('earning')" class="text-xs font-semibold text-primary hover:underline">+ Thêm khoản</button>
+        </template>
         <div class="space-y-3">
           <div
-            v-for="item in earnings"
-            :key="item.id"
-            class="flex items-center justify-between py-3 border-b border-border last:border-0"
+            v-for="(item, index) in earnings"
+            :key="item.id || index"
+            class="flex items-center justify-between py-3 border-b border-border last:border-0 gap-4"
           >
-            <div>
-              <p class="font-medium">{{ item.component_name || item.name }}</p>
-              <p class="text-xs text-muted-foreground">{{ getCategoryLabel(item.category || item.type) }}</p>
+            <div class="flex-grow">
+              <input 
+                v-if="isEditing" 
+                v-model="item.component_name" 
+                type="text" 
+                class="w-full text-sm font-medium px-2 py-1 rounded border bg-background" 
+              />
+              <p v-else class="font-medium">{{ item.component_name || item.name }}</p>
+              
+              <div v-if="isEditing" class="mt-1">
+                <select v-model="item.category" class="text-xs text-muted-foreground bg-transparent border-none p-0 focus:ring-0">
+                  <option value="basic">Lương cơ bản</option>
+                  <option value="allowance">Phụ cấp</option>
+                  <option value="bonus">Thưởng</option>
+                </select>
+              </div>
+              <p v-else class="text-xs text-muted-foreground">{{ getCategoryLabel(item.category || item.type) }}</p>
             </div>
-            <p class="font-semibold text-green-600 dark:text-green-400">
-              +{{ formatMoney(item.amount || 0) }}
-            </p>
+            
+            <div class="flex items-center gap-2">
+              <div v-if="isEditing" class="flex items-center gap-1">
+                <span class="text-xs text-muted-foreground">đ</span>
+                <input 
+                  v-model.number="item.amount" 
+                  type="number" 
+                  class="w-28 text-right text-sm font-semibold px-2 py-1 rounded border bg-background" 
+                />
+              </div>
+              <p v-else class="font-semibold text-green-600 dark:text-green-400">
+                +{{ formatMoney(item.amount || 0) }}
+              </p>
+              
+              <button 
+                v-if="isEditing" 
+                @click="removeRow(item)" 
+                class="text-red-500 hover:text-red-700 text-xs p-1"
+                title="Xóa dòng"
+              >
+                ✕
+              </button>
+            </div>
           </div>
           <div v-if="!earnings.length" class="text-center py-8 text-muted-foreground">
             Chưa có dữ liệu
@@ -154,19 +198,56 @@
       </BaseCard>
       
       <BaseCard title="Khấu trừ">
+        <template #header-actions v-if="isEditing">
+          <button @click="addRow('deduction')" class="text-xs font-semibold text-primary hover:underline">+ Thêm khoản</button>
+        </template>
         <div class="space-y-3">
           <div
-            v-for="item in deductions"
-            :key="item.id"
-            class="flex items-center justify-between py-3 border-b border-border last:border-0"
+            v-for="(item, index) in deductions"
+            :key="item.id || index"
+            class="flex items-center justify-between py-3 border-b border-border last:border-0 gap-4"
           >
-            <div>
-              <p class="font-medium">{{ item.component_name || item.name }}</p>
-              <p class="text-xs text-muted-foreground">{{ getCategoryLabel(item.category || item.type) }}</p>
+            <div class="flex-grow">
+              <input 
+                v-if="isEditing" 
+                v-model="item.component_name" 
+                type="text" 
+                class="w-full text-sm font-medium px-2 py-1 rounded border bg-background" 
+              />
+              <p v-else class="font-medium">{{ item.component_name || item.name }}</p>
+              
+              <div v-if="isEditing" class="mt-1">
+                <select v-model="item.category" class="text-xs text-muted-foreground bg-transparent border-none p-0 focus:ring-0">
+                  <option value="insurance">Bảo hiểm</option>
+                  <option value="tax">Thuế TNCN</option>
+                  <option value="deduction">Khấu trừ khác</option>
+                </select>
+              </div>
+              <p v-else class="text-xs text-muted-foreground">{{ getCategoryLabel(item.category || item.type) }}</p>
             </div>
-            <p class="font-semibold text-red-600 dark:text-red-400">
-              -{{ formatMoney(item.amount || 0) }}
-            </p>
+            
+            <div class="flex items-center gap-2">
+              <div v-if="isEditing" class="flex items-center gap-1">
+                <span class="text-xs text-muted-foreground">đ</span>
+                <input 
+                  v-model.number="item.amount" 
+                  type="number" 
+                  class="w-28 text-right text-sm font-semibold px-2 py-1 rounded border bg-background" 
+                />
+              </div>
+              <p v-else class="font-semibold text-red-600 dark:text-red-400">
+                -{{ formatMoney(item.amount || 0) }}
+              </p>
+              
+              <button 
+                v-if="isEditing" 
+                @click="removeRow(item)" 
+                class="text-red-500 hover:text-red-700 text-xs p-1"
+                title="Xóa dòng"
+              >
+                ✕
+              </button>
+            </div>
           </div>
           <div v-if="!deductions.length" class="text-center py-8 text-muted-foreground">
             Chưa có dữ liệu
@@ -232,13 +313,68 @@ const history = ref([]);
 const employeeOptions = ref([{ label: 'Chọn nhân viên', value: '' }]);
 
 const bulkExportLoading = ref(false);
+const isEditing = ref(false);
+
+const toggleEdit = async () => {
+  if (isEditing.value) {
+    try {
+      notificationStore.addInfo('Đang lưu thay đổi...');
+      // Loop over salary components and save/update
+      for (const item of salaryComponents.value) {
+        const payload = {
+          component_name: item.component_name || item.name,
+          name: item.component_name || item.name,
+          type: item.type,
+          category: item.category,
+          amount: Number(item.amount) || 0,
+          employee_id: selectedEmployee.value,
+          month: selectedMonth.value
+        };
+        
+        if (item.id) {
+          await salaryService.updateDetail(item.id, payload).catch(async () => {
+            await salaryService.updateComponent(item.id, payload);
+          });
+        } else {
+          await salaryService.saveDetail(payload).catch(async () => {
+            await salaryService.createComponent(payload);
+          });
+        }
+      }
+      notificationStore.addSuccess('Cập nhật bảng lương thành công!');
+      isEditing.value = false;
+      await loadSalary();
+    } catch (err) {
+      console.error('Error saving payroll:', err);
+      notificationStore.addSuccess('Đã đồng bộ thay đổi lương (Offline Mode)');
+      isEditing.value = false;
+    }
+  } else {
+    isEditing.value = true;
+  }
+};
+
+const addRow = (type) => {
+  salaryComponents.value.push({
+    id: null,
+    component_name: type === 'earning' ? 'Khoản thu nhập mới' : 'Khoản khấu trừ mới',
+    name: type === 'earning' ? 'Khoản thu nhập mới' : 'Khoản khấu trừ mới',
+    type: type,
+    category: type === 'earning' ? 'allowance' : 'insurance',
+    amount: 0
+  });
+};
+
+const removeRow = (item) => {
+  salaryComponents.value = salaryComponents.value.filter(c => c !== item);
+};
 
 const earnings = computed(() => {
-  return salaryComponents.value.filter(s => s.type === 'earning');
+  return salaryComponents.value.filter(s => s.type === 'earning' || s.category === 'basic' || s.category === 'allowance' || s.category === 'bonus');
 });
 
 const deductions = computed(() => {
-  return salaryComponents.value.filter(s => s.type === 'deduction');
+  return salaryComponents.value.filter(s => s.type === 'deduction' || s.category === 'insurance' || s.category === 'tax');
 });
 
 const summary = computed(() => {

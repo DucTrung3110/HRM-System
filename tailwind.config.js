@@ -61,6 +61,11 @@ export default {
           DEFAULT: "hsl(var(--info) / <alpha-value>)",
           foreground: "hsl(var(--info-foreground) / <alpha-value>)",
         },
+        ai: {
+          DEFAULT: "hsl(var(--ai) / <alpha-value>)",
+          foreground: "hsl(var(--ai-foreground) / <alpha-value>)",
+          soft: "hsl(var(--ai-soft) / <alpha-value>)",
+        },
         ring: "hsl(var(--ring) / <alpha-value>)",
         chart: {
           "1": "hsl(var(--chart-1) / <alpha-value>)",

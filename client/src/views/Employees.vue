@@ -14,8 +14,9 @@
       </BaseButton>
     </div>
 
-    <div v-if="loading" class="text-center py-8">
-      <p class="text-muted-foreground">Đang tải dữ liệu từ API...</p>
+    <div v-if="loading" class="space-y-4">
+      <BaseCard><BaseSkeleton type="cards" :rows="4" /></BaseCard>
+      <BaseCard><BaseSkeleton type="table" :rows="8" :cols="6" /></BaseCard>
     </div>
 
     <div v-else-if="error" class="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
@@ -299,6 +300,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseCard from '../components/BaseCard.vue';
 import BaseButton from '../components/BaseButton.vue';
+import BaseSkeleton from '../components/BaseSkeleton.vue';
 import BaseInput from '../components/BaseInput.vue';
 import BaseSelect from '../components/BaseSelect.vue';
 import BaseBadge from '../components/BaseBadge.vue';
@@ -470,8 +472,9 @@ const getInitials = (name) => {
 
 const getStatusVariant = (status) => {
   if (status === 'active' || status === true) return 'success';
-  if (status === 'probation') return 'warning';
-  if (status === 'inactive' || status === 'resigned' || status === 'terminated') return 'default';
+  if (status === 'probation' || status === 'on_leave') return 'warning';
+  if (status === 'terminated' || status === 'resigned') return 'destructive';
+  if (status === 'inactive') return 'default';
   return 'default';
 };
 
@@ -479,9 +482,10 @@ const getStatusLabel = (status) => {
   const labels = {
     'active': 'Đang làm việc',
     'probation': 'Thử việc',
+    'on_leave': 'Đang nghỉ phép',
     'inactive': 'Nghỉ việc',
-    'terminated': 'Chấm dứt HĐ',
-    'resigned': 'Đã nghỉ'
+    'terminated': 'Đã nghỉ việc',
+    'resigned': 'Đã nghỉ việc'
   };
   return labels[status] || (status ? 'Đang làm việc' : 'Nghỉ việc');
 };
@@ -718,7 +722,12 @@ const applyFilters = () => {
 const loadEmployees = async () => {
   try {
     const response = await employeeService.getAll();
-    employees.value = response?.data || response || [];
+    let emps = response?.data || response || [];
+    if (!Array.isArray(emps)) emps = emps.items || emps.data || [];
+    if (!Array.isArray(emps)) emps = [];
+    
+    // Convert backend data format to match frontend component expectations
+    employees.value = emps.map(emp => ({ ...emp }));
   } catch (err) {
     console.error('Error loading employees:', err);
   }

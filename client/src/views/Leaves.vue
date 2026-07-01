@@ -2,8 +2,8 @@
   <div class="space-y-6">
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
       <div>
-        <h1 class="text-xl sm:text-2xl font-bold">{{ isAdmin ? 'Quản lý Nghỉ phép' : 'Đơn nghỉ phép của tôi' }}</h1>
-        <p class="text-muted-foreground mt-1">{{ isAdmin ? 'Quản lý đơn xin nghỉ phép của nhân viên' : 'Xem và tạo đơn xin nghỉ phép' }}</p>
+        <h1 class="text-xl sm:text-2xl font-bold">{{ pageTitle }}</h1>
+        <p class="text-muted-foreground mt-1">{{ pageSubtitle }}</p>
       </div>
       <BaseButton
         @click="openCreateModal"
@@ -12,6 +12,24 @@
       >
         + Tạo đơn xin nghỉ
       </BaseButton>
+    </div>
+
+    <!-- Dual-lens tabs (admins only): toàn công ty vs của tôi -->
+    <div v-if="isAdmin" class="flex gap-1 border-b border-border -mt-2">
+      <button
+        @click="viewMode = 'org'"
+        :class="['px-4 py-2 text-sm font-medium border-b-2 transition-colors', viewMode === 'org' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground']"
+        data-testid="tab-leave-org"
+      >
+        Toàn công ty
+      </button>
+      <button
+        @click="viewMode = 'mine'"
+        :class="['px-4 py-2 text-sm font-medium border-b-2 transition-colors', viewMode === 'mine' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground']"
+        data-testid="tab-leave-mine"
+      >
+        Của tôi
+      </button>
     </div>
 
     <div v-if="loading" class="text-center py-8">
@@ -51,6 +69,21 @@
         </BaseCard>
       </div>
 
+      <!-- Số dư phép (lens "Của tôi" / nhân viên) -->
+      <BaseCard v-if="!orgLens && balances.length" :title="`Số dư phép ${new Date().getFullYear()}`">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div
+            v-for="b in currentYearBalances"
+            :key="b.leave_type_id"
+            class="rounded-lg border border-border p-3"
+          >
+            <p class="text-sm text-muted-foreground truncate" :title="b.leave_type_name">{{ b.leave_type_name }}</p>
+            <p class="text-2xl font-bold text-foreground mt-1">{{ formatNum(b.remaining) }}</p>
+            <p class="text-xs text-muted-foreground">còn lại / {{ formatNum(b.entitlement) }} ngày · đã dùng {{ formatNum(b.used) }}</p>
+          </div>
+        </div>
+      </BaseCard>
+
       <BaseCard>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <BaseSelect
@@ -83,7 +116,7 @@
         </div>
       </BaseCard>
 
-      <BaseCard :title="isAdmin ? 'Danh sách yêu cầu' : 'Đơn nghỉ phép của tôi'">
+      <BaseCard :title="orgLens ? 'Danh sách yêu cầu' : 'Đơn nghỉ phép của tôi'">
         <div v-if="filteredRequests.length === 0" class="text-center py-8 text-muted-foreground">
           Chưa có yêu cầu nghỉ phép nào
         </div>
@@ -93,12 +126,12 @@
           :data="filteredRequests"
           data-testid="table-leaves"
         >
-          <template v-if="isAdmin" #cell-employee="{ item }">
+          <template v-if="orgLens" #cell-employee="{ item }">
             <div class="flex items-center gap-2">
               <div class="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
-                {{ getInitials(item.full_name || '') }}
+                {{ getInitials(item.employee?.full_name || '') }}
               </div>
-              <span class="font-medium">{{ item.full_name || `NV #${item.employee_id}` }}</span>
+              <span class="font-medium">{{ item.employee?.full_name || `NV #${item.employee_id}` }}</span>
             </div>
           </template>
 
@@ -125,7 +158,7 @@
 
           <template #actions="{ item }">
             <div class="flex items-center gap-2">
-              <template v-if="isAdmin && item.status === 'pending'">
+              <template v-if="orgLens && item.status === 'pending'">
                 <button
                   @click="approveRequest(item)"
                   class="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-900 text-green-600 dark:text-green-400"
@@ -148,6 +181,17 @@
                 </button>
               </template>
               <button
+                v-if="canCancel(item)"
+                @click="cancelRequest(item)"
+                class="p-1.5 rounded hover:bg-orange-100 dark:hover:bg-orange-900 text-orange-600 dark:text-orange-400"
+                title="Hủy đơn"
+                :disabled="processing"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              </button>
+              <button
                 @click="viewDetail(item)"
                 class="p-1.5 rounded hover:bg-muted"
                 title="Xem chi tiết"
@@ -169,7 +213,7 @@
       data-testid="modal-create-leave"
     >
       <div class="space-y-4">
-        <template v-if="isAdmin">
+        <template v-if="orgLens">
           <BaseSelect
             v-model="form.employee_id"
             label="Nhân viên"
@@ -189,19 +233,63 @@
           :options="leaveTypeOptions.filter(o => o.value)"
           required
         />
-        <div class="grid grid-cols-2 gap-4">
-          <BaseInput
-            v-model="form.start_date"
-            type="date"
-            label="Từ ngày"
-            required
-          />
-          <BaseInput
-            v-model="form.end_date"
-            type="date"
-            label="Đến ngày"
-            required
-          />
+
+        <!-- Thông tin định mức theo loại nghỉ (luật VN) -->
+        <div v-if="selectedType" class="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              :class="['px-2 py-0.5 rounded text-xs font-medium', selectedType.paid
+                ? 'bg-green-500/15 text-green-700 dark:text-green-400'
+                : 'bg-gray-500/15 text-gray-600 dark:text-gray-300']"
+            >{{ selectedType.paid ? 'Có lương' : 'Không lương' }}</span>
+            <span class="px-2 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-700 dark:text-blue-400">
+              {{ accrualLabel(selectedType.accrual) }}
+            </span>
+            <span v-if="selectedType.statutory_ref" class="text-xs text-muted-foreground">{{ selectedType.statutory_ref }}</span>
+          </div>
+          <p v-if="selectedType.accrual === 'per_event' && selectedType.max_days_per_event" class="text-muted-foreground">
+            Tối đa <span class="font-semibold text-foreground">{{ selectedType.max_days_per_event }}</span> ngày/lần theo luật (không trừ phép năm).
+          </p>
+          <template v-if="selectedType.requires_balance">
+            <p v-if="selectedBalance" class="text-muted-foreground">
+              Số dư còn lại:
+              <span class="font-semibold text-foreground">{{ formatNum(selectedBalance.remaining) }}</span>
+              / {{ formatNum(selectedBalance.entitlement) }} ngày (năm {{ selectedBalance.year }})
+            </p>
+            <p v-else class="text-amber-600 dark:text-amber-400">
+              Chưa có số dư phép loại này cho năm áp dụng — vui lòng chạy cấp phép năm.
+            </p>
+          </template>
+        </div>
+
+        <BaseSelect
+          v-model="form.duration_type"
+          label="Thời lượng"
+          :options="durationOptions"
+        />
+        <!-- Nửa ngày: chọn buổi -->
+        <BaseSelect
+          v-if="form.duration_type === 'half_day'"
+          v-model="form.half_session"
+          label="Buổi"
+          :options="[{label:'Buổi sáng', value:'morning'}, {label:'Buổi chiều', value:'afternoon'}]"
+        />
+        <!-- Theo giờ: số giờ -->
+        <BaseInput
+          v-if="form.duration_type === 'hourly'"
+          v-model="form.hours"
+          type="number"
+          label="Số giờ nghỉ"
+          placeholder="VD: 2"
+        />
+
+        <div v-if="form.duration_type === 'full_day'" class="grid grid-cols-2 gap-4">
+          <BaseInput v-model="form.start_date" type="date" label="Từ ngày" required />
+          <BaseInput v-model="form.end_date" type="date" label="Đến ngày" required />
+        </div>
+        <div v-else>
+          <BaseInput v-model="form.start_date" type="date" label="Ngày nghỉ" required />
+          <p class="text-xs text-muted-foreground mt-1">{{ form.duration_type === 'half_day' ? 'Nghỉ nửa ngày = 0.5 công' : 'Nghỉ theo giờ — quy đổi theo giờ chuẩn/ngày' }}</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-foreground mb-2">Lý do</label>
@@ -234,11 +322,14 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <p class="text-sm text-muted-foreground">Nhân viên</p>
-            <p class="font-medium">{{ selectedRequest.full_name || `NV #${selectedRequest.employee_id}` }}</p>
+            <p class="font-medium">{{ selectedRequest.full_name || selectedRequest.employee?.full_name || empNameById(selectedRequest.employee_id) || `NV #${selectedRequest.employee_id}` }}</p>
           </div>
           <div>
             <p class="text-sm text-muted-foreground">Loại nghỉ</p>
             <p class="font-medium">{{ selectedRequest.leave_type || getLeaveTypeName(selectedRequest.leave_type_id) }}</p>
+            <p v-if="selectedRequest.statutory_ref" class="text-xs text-muted-foreground mt-0.5">
+              {{ selectedRequest.paid === false ? 'Không lương' : 'Có lương' }} · {{ selectedRequest.statutory_ref }}
+            </p>
           </div>
           <div>
             <p class="text-sm text-muted-foreground">Từ ngày</p>
@@ -261,7 +352,11 @@
         </div>
         <div>
           <p class="text-sm text-muted-foreground">Lý do</p>
-          <p class="font-medium">{{ selectedRequest.reason || 'Không có' }}</p>
+          <p class="font-medium mb-4">{{ selectedRequest.reason || 'Không có' }}</p>
+        </div>
+        <div class="border-t border-border pt-4">
+          <p class="text-sm font-semibold text-foreground mb-3">Quy trình phê duyệt</p>
+          <ApprovalTimeline :steps="approvalSteps" />
         </div>
       </div>
 
@@ -273,7 +368,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import BaseCard from '../components/BaseCard.vue';
 import BaseButton from '../components/BaseButton.vue';
 import BaseInput from '../components/BaseInput.vue';
@@ -281,6 +376,8 @@ import BaseSelect from '../components/BaseSelect.vue';
 import BaseBadge from '../components/BaseBadge.vue';
 import BaseTable from '../components/BaseTable.vue';
 import BaseModal from '../components/BaseModal.vue';
+import ApprovalTimeline from '../components/ApprovalTimeline.vue';
+import { buildApprovalSteps, statusVN, statusVariant } from '../utils/approvalSteps';
 import { leaveService } from '../services/leaveService';
 import { employeeService } from '../services/employeeService';
 import { authService } from '../services/authService';
@@ -288,11 +385,37 @@ import { authService } from '../services/authService';
 const isAdmin = computed(() => authService.isAdmin());
 const currentUser = computed(() => authService.getUser());
 
+// Dual-lens: admins toggle between the company-wide view and their own ("My Space").
+const viewMode = ref('org'); // 'org' = toàn công ty | 'mine' = của tôi
+const myEmployeeId = computed(() => currentUser.value?.employee_id || currentUser.value?.id || null);
+// Company-wide (admin approving others) only in the 'org' lens.
+const orgLens = computed(() => isAdmin.value && viewMode.value === 'org');
+const pageTitle = computed(() => orgLens.value ? 'Quản lý Nghỉ phép' : 'Đơn nghỉ phép của tôi');
+const pageSubtitle = computed(() => orgLens.value ? 'Duyệt và quản lý đơn nghỉ phép của nhân viên' : 'Xem và tạo đơn xin nghỉ phép của bạn');
+
 const loading = ref(true);
 const error = ref('');
 const saving = ref(false);
 const processing = ref(false);
 const formError = ref('');
+
+const roleLabels = { MANAGER: 'Quản lý trực tiếp', DEPT_HEAD: 'Trưởng phòng', HR: 'Nhân sự (HR)', DIRECTOR: 'Ban giám đốc' };
+
+// Tên NV theo id (để hiện NGƯỜI DUYỆT thật trong timeline).
+const empNameById = (id) => {
+  if (!id) return null;
+  const e = employees.value.find((x) => String(x.id) === String(id));
+  return e ? (e.full_name || e.employee_code) : null;
+};
+
+const approvalSteps = computed(() => {
+  if (!selectedRequest.value) return [];
+  const req = selectedRequest.value;
+  return buildApprovalSteps(req, {
+    creatorName: req.full_name || empNameById(req.employee_id) || 'Nhân viên',
+    resolveName: empNameById,
+  });
+});
 
 const showCreateModal = ref(false);
 const showDetailModal = ref(false);
@@ -301,6 +424,28 @@ const selectedRequest = ref(null);
 const requests = ref([]);
 const leaveTypes = ref([]);
 const employees = ref([]);
+const balances = ref([]);
+
+// Chuẩn hoá leave_types: API trả leave_type_name + cấu hình trong meta
+// (axios đã flatten meta ra top-level). Gộp về { id, code, name, paid, accrual,
+// requires_balance, max_days_per_event, statutory_ref }.
+const mapType = (t) => {
+  let meta = t.meta;
+  if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch { meta = {}; } }
+  meta = meta || {};
+  const category = String(t.category || '').toUpperCase();
+  return {
+    id: t.id,
+    code: t.leave_type_code || t.code || '',
+    name: t.leave_type_name || t.name || `Loại #${t.id}`,
+    category,
+    paid: t.paid ?? meta.paid ?? (category !== 'UNPAID'),
+    accrual: t.accrual ?? meta.accrual ?? 'none',
+    requires_balance: t.requires_balance ?? meta.requires_balance ?? false,
+    max_days_per_event: t.max_days_per_event ?? meta.max_days_per_event ?? null,
+    statutory_ref: t.statutory_ref ?? meta.statutory_ref ?? null,
+  };
+};
 
 const filters = ref({
   status: '',
@@ -313,8 +458,17 @@ const form = ref({
   leave_type_id: '',
   start_date: '',
   end_date: '',
-  reason: ''
+  reason: '',
+  duration_type: 'full_day',
+  half_session: 'morning',
+  hours: ''
 });
+
+const durationOptions = [
+  { label: 'Cả ngày', value: 'full_day' },
+  { label: 'Nửa ngày', value: 'half_day' },
+  { label: 'Theo giờ', value: 'hourly' }
+];
 
 const adminColumns = [
   { key: 'employee', label: 'Nhân viên' },
@@ -331,15 +485,16 @@ const employeeColumns = [
   { key: 'status', label: 'Trạng thái' },
 ];
 
-const displayColumns = computed(() => isAdmin.value ? adminColumns : employeeColumns);
+const displayColumns = computed(() => orgLens.value ? adminColumns : employeeColumns);
 
 const displayRequests = computed(() => {
-  if (isAdmin.value) {
+  // Org lens (admin): all company requests. Otherwise: only my own.
+  if (orgLens.value) {
     return requests.value;
   }
-  const user = currentUser.value;
-  if (!user?.employee_id) return requests.value;
-  return requests.value.filter(r => String(r.employee_id) === String(user.employee_id));
+  const myId = myEmployeeId.value;
+  if (!myId) return isAdmin.value ? [] : requests.value;
+  return requests.value.filter(r => String(r.employee_id) === String(myId));
 });
 
 const statusOptions = [
@@ -410,41 +565,63 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString('vi-VN');
 };
 
-const getStatusVariant = (status) => {
-  const variants = {
-    draft: 'default',
-    pending: 'warning',
-    approved: 'success',
-    rejected: 'error',
-    cancelled: 'default'
-  };
-  return variants[status] || 'default';
-};
-
-const getStatusText = (status) => {
-  const texts = {
-    draft: 'Nháp',
-    pending: 'Chờ duyệt',
-    approved: 'Đã duyệt',
-    rejected: 'Từ chối',
-    cancelled: 'Đã hủy'
-  };
-  return texts[status] || status;
-};
+const getStatusVariant = (status) => (String(status).toLowerCase() === 'draft' ? 'default' : statusVariant(status));
+const getStatusText = (status) => (String(status).toLowerCase() === 'draft' ? 'Nháp' : statusVN(status));
 
 const getLeaveTypeName = (id) => {
-  const type = leaveTypes.value.find(t => t.id === id);
+  const type = leaveTypes.value.find(t => String(t.id) === String(id));
   return type ? type.name : `Loại #${id}`;
 };
 
+const accrualLabel = (accrual) => ({
+  annual: 'Phép năm (có hạn mức)',
+  per_event: 'Theo sự kiện',
+  none: 'Không hạn mức',
+}[accrual] || accrual || '');
+
+// Loại nghỉ đang chọn trong form tạo đơn.
+const selectedType = computed(() =>
+  leaveTypes.value.find(t => String(t.id) === String(form.value.leave_type_id)) || null
+);
+
+// Số dư phép năm tương ứng loại đang chọn (theo năm của ngày bắt đầu).
+const selectedBalance = computed(() => {
+  const t = selectedType.value;
+  if (!t) return null;
+  const yr = (form.value.start_date ? new Date(form.value.start_date) : new Date()).getFullYear();
+  return balances.value.find(b => Number(b.leave_type_id) === Number(t.id) && Number(b.year) === yr) || null;
+});
+
+const currentYearBalances = computed(() => {
+  const yr = new Date().getFullYear();
+  return balances.value.filter(b => Number(b.year) === yr);
+});
+
+const loadBalances = async (empId) => {
+  if (!empId) { balances.value = []; return; }
+  try {
+    const res = await leaveService.getBalances(empId);
+    balances.value = res?.data || res || [];
+  } catch {
+    balances.value = [];
+  }
+};
+
+const formatNum = (n) => {
+  const v = Number(n || 0);
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+};
+
 const resetForm = () => {
-  const user = currentUser.value;
   form.value = {
-    employee_id: isAdmin.value ? '' : (user?.employee_id ? String(user.employee_id) : ''),
+    employee_id: orgLens.value ? '' : (myEmployeeId.value ? String(myEmployeeId.value) : ''),
     leave_type_id: '',
     start_date: '',
     end_date: '',
-    reason: ''
+    reason: '',
+    duration_type: 'full_day',
+    half_session: 'morning',
+    hours: ''
   };
   formError.value = '';
 };
@@ -452,7 +629,16 @@ const resetForm = () => {
 const openCreateModal = () => {
   resetForm();
   showCreateModal.value = true;
+  const empId = orgLens.value ? form.value.employee_id : myEmployeeId.value;
+  if (empId) loadBalances(empId);
 };
+
+// Trong lens "Toàn công ty": đổi nhân viên trong form → nạp số dư phép của họ.
+watch(() => form.value.employee_id, (id) => {
+  if (showCreateModal.value && orgLens.value && id) {
+    loadBalances(id);
+  }
+});
 
 const closeCreateModal = () => {
   showCreateModal.value = false;
@@ -465,8 +651,8 @@ const viewDetail = (request) => {
 };
 
 const handleCreate = async () => {
-  const employeeId = isAdmin.value ? form.value.employee_id : (currentUser.value?.employee_id ? String(currentUser.value.employee_id) : '');
-  
+  const employeeId = orgLens.value ? form.value.employee_id : (myEmployeeId.value ? String(myEmployeeId.value) : '');
+
   if (!employeeId) {
     formError.value = 'Không thể xác định nhân viên. Vui lòng thử lại.';
     return;
@@ -475,28 +661,42 @@ const handleCreate = async () => {
     formError.value = 'Vui lòng chọn loại nghỉ';
     return;
   }
-  if (!form.value.start_date || !form.value.end_date) {
+  const partial = form.value.duration_type !== 'full_day';
+  if (!form.value.start_date) {
+    formError.value = 'Vui lòng chọn ngày nghỉ';
+    return;
+  }
+  if (!partial && !form.value.end_date) {
     formError.value = 'Vui lòng chọn ngày bắt đầu và kết thúc';
+    return;
+  }
+  if (form.value.duration_type === 'hourly' && !(parseFloat(form.value.hours) > 0)) {
+    formError.value = 'Vui lòng nhập số giờ nghỉ';
     return;
   }
 
   try {
     saving.value = true;
     formError.value = '';
-    
+
+    // Nghỉ nửa ngày / theo giờ chỉ trong 1 ngày → end = start.
+    const endDateVal = partial ? form.value.start_date : form.value.end_date;
     const startDate = new Date(form.value.start_date);
-    const endDate = new Date(form.value.end_date);
+    const endDate = new Date(endDateVal);
     const diffTime = Math.abs(endDate - startDate);
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-    
+
     await leaveService.createRequest({
       employee_id: parseInt(employeeId),
       leave_type_id: parseInt(form.value.leave_type_id),
       start_date: form.value.start_date,
-      end_date: form.value.end_date,
+      end_date: endDateVal,
       total_days: diffDays,
       days_count: diffDays,
       reason: form.value.reason,
+      duration_type: form.value.duration_type,
+      half_session: form.value.half_session,
+      hours: form.value.duration_type === 'hourly' ? parseFloat(form.value.hours) : undefined,
       status: 'pending'
     });
     
@@ -504,7 +704,11 @@ const handleCreate = async () => {
     await loadRequests();
   } catch (err) {
     console.error('Error creating leave request:', err);
-    formError.value = err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra';
+    // BE trả lỗi field tại data.data.errors.{field}[0] (vd vượt trần ngày/lần).
+    const fieldErrors = err.response?.data?.data?.errors;
+    const firstField = fieldErrors && typeof fieldErrors === 'object' ? Object.values(fieldErrors)[0] : null;
+    formError.value = (Array.isArray(firstField) ? firstField[0] : firstField)
+      || err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra';
   } finally {
     saving.value = false;
   }
@@ -537,6 +741,29 @@ const rejectRequest = async (request) => {
   } catch (err) {
     console.error('Error rejecting request:', err);
     alert(err.response?.data?.error || 'Có lỗi xảy ra khi từ chối');
+  } finally {
+    processing.value = false;
+  }
+};
+
+const canCancel = (request) => {
+  if (!['pending', 'approved'].includes(request.status)) return false;
+  const user = currentUser.value;
+  if (!user?.employee_id) return false;
+  return String(request.employee_id) === String(user.employee_id);
+};
+
+const cancelRequest = async (request) => {
+  if (processing.value || !canCancel(request)) return;
+  if (!confirm('Bạn có chắc chắn muốn hủy đơn nghỉ phép này?')) return;
+
+  try {
+    processing.value = true;
+    await leaveService.cancel(request.id);
+    await loadRequests();
+  } catch (err) {
+    console.error('Error cancelling request:', err);
+    alert(err.response?.data?.error || err.response?.data?.message || 'Có lỗi xảy ra khi hủy đơn');
   } finally {
     processing.value = false;
   }
@@ -586,12 +813,17 @@ onMounted(async () => {
     const results = await Promise.all(promises);
     
     requests.value = results[0]?.data || results[0] || [];
-    leaveTypes.value = results[1]?.data || results[1] || [];
-    
+    leaveTypes.value = (results[1]?.data || results[1] || []).map(mapType);
+
     if (isAdmin.value && results[2]) {
       employees.value = results[2]?.data || results[2] || [];
     }
-    
+
+    // Số dư phép của chính mình (cho thẻ tổng quan ở lens "Của tôi").
+    if (myEmployeeId.value) {
+      await loadBalances(myEmployeeId.value);
+    }
+
   } catch (err) {
     console.error('Leaves API Error:', err);
     if (err.response?.status !== 403) {

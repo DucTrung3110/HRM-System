@@ -1,26 +1,35 @@
 <template>
-  <div class="min-h-screen bg-background">
+  <div class="min-h-screen bg-background text-foreground">
     <!-- Mobile Menu Overlay -->
     <div 
       v-if="isMobileMenuOpen" 
-      class="fixed inset-0 bg-black/50 z-40 lg:hidden"
+      class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
       @click="isMobileMenuOpen = false"
     ></div>
 
     <!-- Sidebar -->
     <aside 
       :class="[
-        'fixed left-0 top-0 h-full w-64 bg-sidebar border-r border-sidebar-border z-50 transition-transform duration-300',
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        'fixed left-0 top-0 h-full w-72 bg-sidebar/98 backdrop-blur-xl border-r border-sidebar-border z-50 transition-transform duration-300 shadow-[18px_0_60px_-46px_rgba(15,23,42,0.45)]',
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full',
+        isSidebarCollapsed ? 'lg:-translate-x-full' : 'lg:translate-x-0'
       ]"
     >
-      <div class="h-16 flex items-center justify-center px-6 border-b border-sidebar-border relative">
-        <h1 class="text-2xl font-bold" style="font-family: 'Montserrat', sans-serif;">
-          <span class="font-extrabold" style="color: #124DA3;">CODE</span><span class="font-extrabold" style="color: #F37022;">DEN</span><span class="font-extrabold" style="color: #4EB748;">NGU</span>
-        </h1>
+      <div class="flex h-[4.5rem] items-center justify-between border-b border-sidebar-border/70 px-4 py-4 relative">
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-sm font-extrabold text-primary">
+            HR
+          </div>
+          <div class="min-w-0">
+            <h1 class="truncate text-xl font-bold leading-none" style="font-family: 'Montserrat', sans-serif;">
+              <span class="font-extrabold" style="color: #124DA3;">CODE</span><span class="font-extrabold" style="color: #F37022;">DEN</span><span class="font-extrabold" style="color: #4EB748;">NGU</span>
+            </h1>
+            <span class="mt-1 block text-[10px] font-semibold uppercase tracking-normal text-muted-foreground" style="font-family: Inter, sans-serif;">HRM Workspace</span>
+          </div>
+        </div>
         <button 
           @click="isMobileMenuOpen = false"
-          class="lg:hidden p-2 hover:bg-sidebar-accent rounded-lg absolute right-6"
+          class="rounded-lg p-2 hover:bg-sidebar-accent lg:hidden"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -28,29 +37,29 @@
         </button>
       </div>
 
-      <nav class="p-4 space-y-4 overflow-y-auto h-[calc(100%-4rem)]">
+      <nav class="h-[calc(100%-4.5rem)] overflow-y-auto px-3 py-4">
         <!-- Render Dashboards (No heading) -->
-        <div class="space-y-1">
+        <div class="space-y-1 pb-3">
           <router-link
             v-for="item in dashboardGroup.items"
             :key="item.path"
             :to="item.path"
             @click="isMobileMenuOpen = false"
-            class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group"
+            class="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200"
             :class="isActive(item.path) 
-              ? 'bg-sidebar-primary/10 text-sidebar-primary font-semibold' 
-              : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'"
+              ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/15' 
+              : 'text-sidebar-foreground hover:bg-sidebar-accent/65 hover:text-sidebar-accent-foreground'"
           >
-            <component :is="item.icon" class="flex-shrink-0 w-5 h-5 transition-colors" :class="isActive(item.path) ? 'text-sidebar-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground'" />
+            <component :is="item.icon" class="h-[1.125rem] w-[1.125rem] flex-shrink-0 transition-colors" :class="isActive(item.path) ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground'" />
             <span class="text-sm font-medium">{{ item.label }}</span>
           </router-link>
         </div>
 
         <!-- Render collapsible groups -->
-        <div v-for="group in menuGroups" :key="group.id" class="space-y-1">
+        <div v-for="group in menuGroups" :key="group.id" class="space-y-1 border-t border-sidebar-border/70 py-3 first:border-t-0">
           <button 
             @click="toggleMenu(group)"
-            class="w-full flex items-center justify-between px-4 py-2 mt-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+            class="flex w-full items-center justify-between px-3 py-1.5 text-[10px] font-bold uppercase tracking-normal text-muted-foreground transition-colors hover:text-foreground"
           >
             <span>{{ group.label }}</span>
             <svg 
@@ -62,18 +71,18 @@
             </svg>
           </button>
           
-          <div v-show="group.isOpen" class="space-y-1 mt-1">
+          <div v-show="group.isOpen" class="mt-1 space-y-1">
             <router-link
               v-for="item in group.items"
               :key="item.path"
               :to="item.path"
               @click="isMobileMenuOpen = false"
-              class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group"
+              class="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200"
               :class="isActive(item.path) 
-                ? 'bg-sidebar-primary/10 text-sidebar-primary font-semibold' 
-                : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'"
+                ? 'bg-primary/10 text-primary font-semibold ring-1 ring-primary/15' 
+                : 'text-sidebar-foreground hover:bg-sidebar-accent/65 hover:text-sidebar-accent-foreground'"
             >
-              <component :is="item.icon" class="flex-shrink-0 w-5 h-5 transition-colors" :class="isActive(item.path) ? 'text-sidebar-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground'" />
+              <component :is="item.icon" class="h-[1.125rem] w-[1.125rem] flex-shrink-0 transition-colors" :class="isActive(item.path) ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-accent-foreground'" />
               <span class="text-sm font-medium">{{ item.label }}</span>
             </router-link>
           </div>
@@ -82,14 +91,16 @@
     </aside>
 
     <!-- Main Content -->
-    <div class="flex-1 flex flex-col overflow-hidden lg:ml-64">
+    <div :class="['flex-1 flex flex-col overflow-hidden transition-[margin] duration-300', isSidebarCollapsed ? 'lg:ml-0' : 'lg:ml-72']">
       <!-- Top Bar -->
-      <header class="h-16 border-b border-border bg-background px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
-        <div class="flex items-center gap-4">
+      <header class="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/70 bg-background/88 px-4 backdrop-blur-xl sm:px-6">
+        <div class="flex min-w-0 items-center gap-4">
           <button
-            @click="isMobileMenuOpen = true"
-            class="p-2 rounded-lg hover-elevate active-elevate-2 lg:hidden"
+            @click="toggleSidebar"
+            class="p-2 rounded-lg hover-elevate active-elevate-2"
             data-testid="button-sidebar-toggle"
+            :title="isSidebarCollapsed ? 'Mở thanh điều hướng' : 'Thu gọn thanh điều hướng'"
+            aria-label="Bật/tắt thanh điều hướng"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -97,21 +108,24 @@
           </button>
 
           <!-- Breadcrumbs -->
-          <div class="flex items-center gap-2 text-sm">
-            <router-link to="/" class="text-muted-foreground hover:text-foreground">Home</router-link>
-            <span class="text-muted-foreground">/</span>
-            <span class="text-foreground font-medium">{{ currentPageTitle }}</span>
+          <div class="hidden min-w-0 sm:block">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+              <router-link to="/" class="hover:text-foreground">{{ t('breadcrumb.workspace', 'Workspace') }}</router-link>
+              <span>/</span>
+              <span>HRM</span>
+            </div>
+            <p class="truncate text-sm font-semibold text-foreground">{{ currentPageTitle }}</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-2 sm:gap-4">
+        <div class="flex items-center gap-2 sm:gap-3">
           <!-- Search with Dropdown -->
           <div class="relative hidden md:block" ref="searchContainerRef">
             <input
               v-model="searchQuery"
               type="search"
-              placeholder="Tìm kiếm trang..."
-              class="w-64 px-4 py-2 pl-10 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              :placeholder="t('common.searchPages', 'Tìm kiếm trang...')"
+              class="h-10 w-72 rounded-xl border border-input bg-card/90 px-4 py-2 pl-10 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring xl:w-[22rem]"
               data-testid="input-global-search"
               @focus="isSearchFocused = true"
               @keydown.enter="handleSearchEnter"
@@ -126,7 +140,7 @@
             <!-- Search Results Dropdown -->
             <div 
               v-if="isSearchFocused && (searchQuery.trim() || filteredNavItems.length > 0)"
-              class="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto z-50"
+              class="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-card shadow-lg"
             >
               <div v-if="filteredNavItems.length === 0 && searchQuery.trim()" class="p-3 text-muted-foreground text-sm text-center">
                 Không tìm thấy trang nào
@@ -148,13 +162,90 @@
             </div>
           </div>
 
+          <!-- Quick Add (+) -->
+          <div v-if="quickAddActions.length" class="relative" ref="quickAddContainerRef">
+            <button
+              type="button"
+              @click="isQuickAddOpen = !isQuickAddOpen"
+              class="flex items-center justify-center h-9 w-9 rounded-xl border border-primary/25 bg-primary/10 text-primary shadow-sm transition-colors hover:bg-primary/15"
+              data-testid="button-quick-add"
+              title="Tạo nhanh"
+              aria-label="Tạo nhanh"
+            >
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+            <div
+              v-if="isQuickAddOpen"
+              class="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-lg"
+            >
+              <p class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tạo nhanh</p>
+              <button
+                v-for="action in quickAddActions"
+                :key="action.path"
+                @click="runQuickAdd(action)"
+                class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                <component :is="action.icon" class="h-4 w-4 text-muted-foreground" />
+                <span>{{ action.label }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- AI Assistant button -->
+          <button
+            type="button"
+            @click="openAiAssistant"
+            class="hidden items-center gap-1.5 rounded-xl border border-ai/25 bg-ai/10 px-3 py-2 text-sm font-semibold text-ai shadow-sm transition-colors hover:bg-ai/15 sm:inline-flex"
+            data-testid="button-ai-assistant"
+            :title="t('common.askAi', 'Hỏi HR AI')"
+          >
+            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l1.6 4.6L18 8.2l-4.4 1.6L12 14.4l-1.6-4.6L6 8.2l4.4-1.6L12 2zm6.5 9l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6zM6 14l.7 2 2 .7-2 .7L6 19.4 5.3 17.4l-2-.7 2-.7L6 14z" />
+            </svg>
+            <span>{{ t('common.askAi', 'Hỏi HR AI') }}</span>
+          </button>
+
+          <!-- Language switcher -->
+          <div class="relative" ref="langContainerRef">
+            <button
+              type="button"
+              @click="toggleLangMenu"
+              class="flex items-center gap-1 rounded-xl border border-border bg-card/90 px-2.5 py-2 text-sm font-semibold text-foreground shadow-sm hover-elevate active-elevate-2"
+              data-testid="button-language-switcher"
+            >
+              {{ currentLocaleLabel }}
+              <svg class="h-3.5 w-3.5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div
+              v-if="isLangMenuOpen"
+              class="absolute right-0 top-full z-50 mt-2 w-28 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-lg"
+            >
+              <button
+                v-for="loc in availableLocales"
+                :key="loc.code"
+                @click="selectLocale(loc.code)"
+                class="flex w-full items-center justify-between px-3 py-2 text-sm transition-colors hover:bg-muted"
+                :class="locale === loc.code ? 'text-primary font-semibold' : 'text-foreground'"
+              >
+                {{ loc.label }}
+                <svg v-if="locale === loc.code" class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
           <ThemeToggle />
 
           <!-- Notifications -->
           <div class="relative" ref="notificationContainerRef">
             <button 
               @click="toggleNotifications"
-              class="relative p-2 rounded-lg hover-elevate active-elevate-2" 
+              class="relative rounded-xl border border-border bg-card/90 p-2.5 shadow-sm hover-elevate active-elevate-2" 
               data-testid="button-notifications"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,15 +259,15 @@
             <!-- Notifications Dropdown -->
             <div 
               v-if="isNotificationsOpen"
-              class="absolute top-full right-0 mt-2 w-80 bg-background border border-border rounded-lg shadow-lg z-50"
+              class="absolute right-0 top-full z-50 mt-2 w-80 rounded-xl border border-border bg-card shadow-lg"
             >
               <div class="flex items-center justify-between px-4 py-3 border-b border-border">
-                <h3 class="font-semibold text-sm">Thông báo</h3>
-                <button 
+                <h3 class="font-semibold text-sm">{{ t('common.notifications', 'Thông báo') }}</h3>
+                <button
                   @click="markAllAsRead"
                   class="text-xs text-primary hover:underline"
                 >
-                  Đánh dấu đã đọc
+                  {{ t('common.markAllRead', 'Đánh dấu đã đọc') }}
                 </button>
               </div>
               <div class="max-h-64 overflow-y-auto">
@@ -200,7 +291,7 @@
                 </div>
               </div>
               <div v-if="notifications.length === 0" class="p-4 text-center text-muted-foreground text-sm">
-                Không có thông báo mới
+                {{ t('common.noNotifications', 'Không có thông báo mới') }}
               </div>
             </div>
           </div>
@@ -209,7 +300,7 @@
           <div class="relative" ref="avatarContainerRef">
             <button
               @click="toggleAvatarMenu"
-              class="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold hover:opacity-90 transition-opacity"
+              class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
               data-testid="button-avatar"
               :title="currentUserEmail"
             >
@@ -219,11 +310,11 @@
             <!-- Avatar Dropdown Menu -->
             <div
               v-if="isAvatarMenuOpen"
-              class="absolute top-full right-0 mt-2 w-56 bg-background border border-border rounded-lg shadow-lg z-50"
+              class="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-border bg-card shadow-lg"
             >
               <div class="px-4 py-3 border-b border-border">
                 <p class="text-sm font-medium text-foreground truncate">{{ currentUserEmail }}</p>
-                <p class="text-xs text-muted-foreground mt-0.5">{{ isAdmin ? 'Quản trị viên' : 'Nhân viên' }}</p>
+                <p class="text-xs text-muted-foreground mt-0.5">{{ isAdmin ? t('common.admin', 'Quản trị viên') : t('common.employee', 'Nhân viên') }}</p>
               </div>
               <div class="py-1">
                 <button
@@ -233,7 +324,7 @@
                   <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                   </svg>
-                  Đổi mật khẩu
+                  {{ t('common.changePassword', 'Đổi mật khẩu') }}
                 </button>
                 <button
                   @click="handleLogout"
@@ -242,7 +333,7 @@
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
-                  Đăng xuất
+                  {{ t('common.logout', 'Đăng xuất') }}
                 </button>
               </div>
             </div>
@@ -280,18 +371,129 @@
       </div>
 
       <!-- Page Content -->
-      <main class="flex-1 overflow-auto p-4 sm:p-6">
+      <main class="flex-1 overflow-auto p-4 pb-20 sm:p-6 lg:pb-6 xl:p-7">
         <router-view />
       </main>
     </div>
+
+    <!-- Mobile Bottom Navigation Bar (Grab Food / Mobile App style) -->
+    <nav class="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-xl border-t border-border flex items-center justify-around z-40 px-2 pb-safe shadow-lg">
+      <router-link 
+        v-for="item in mobileNavItems" 
+        :key="item.path" 
+        :to="item.path"
+        class="flex flex-col items-center justify-center flex-1 h-full text-muted-foreground transition-all duration-200"
+        active-class="text-primary font-semibold scale-105"
+      >
+        <component :is="item.icon" class="w-5 h-5" />
+        <span class="text-[10px] mt-1">{{ item.label }}</span>
+      </router-link>
+    </nav>
+
+    <!-- AI Assistant Chat Drawer -->
+    <BaseDrawer v-model="isAiOpen" :hide-header="true" width="26rem" test-id="ai-drawer">
+      <template #header>
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg border border-ai/25 bg-ai/10 text-ai">
+            <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l1.6 4.6L18 8.2l-4.4 1.6L12 14.4l-1.6-4.6L6 8.2l4.4-1.6L12 2zm6.5 9l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9.9-2.6zM6 14l.7 2 2 .7-2 .7L6 19.4 5.3 17.4l-2-.7 2-.7L6 14z" />
+            </svg>
+          </span>
+          <h2 class="truncate text-base font-semibold">{{ t('ai.title', 'Trợ lý HR') }}</h2>
+        </div>
+      </template>
+
+      <!-- Chat body: full-height column with scrollable list + composer -->
+      <div class="flex h-full flex-col">
+        <!-- Not-configured info note -->
+        <div
+          v-if="!aiConfigured"
+          class="mb-3 flex items-start gap-2 rounded-lg border border-ai/25 bg-ai/10 px-3 py-2 text-xs text-ai"
+        >
+          <svg class="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{{ t('ai.notConfigured', 'Trợ lý AI chưa được cấu hình — thêm ANTHROPIC_API_KEY') }}</span>
+        </div>
+
+        <!-- Scrollable message list -->
+        <div ref="aiMessagesRef" class="flex-1 space-y-3 overflow-y-auto pr-1">
+          <div
+            v-for="(msg, idx) in aiMessages"
+            :key="idx"
+            class="flex"
+            :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+          >
+            <div
+              v-if="msg.role === 'assistant'"
+              class="max-w-[85%] rounded-2xl rounded-tl-sm border border-border bg-muted/40 px-3.5 py-2.5 text-sm text-foreground"
+            >
+              <span class="mb-1 inline-flex items-center gap-1 rounded-md border border-ai/25 bg-ai/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ai">
+                <svg class="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2l1.6 4.6L18 8.2l-4.4 1.6L12 14.4l-1.6-4.6L6 8.2l4.4-1.6L12 2z" />
+                </svg>
+                {{ t('ai.badge', 'AI') }}
+              </span>
+              <p class="whitespace-pre-wrap break-words leading-relaxed">{{ msg.content }}</p>
+            </div>
+            <div
+              v-else
+              class="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground"
+            >
+              {{ msg.content }}
+            </div>
+          </div>
+
+          <!-- Typing indicator -->
+          <div v-if="aiLoading" class="flex justify-start">
+            <div class="flex items-center gap-1.5 rounded-2xl rounded-tl-sm border border-border bg-muted/40 px-3.5 py-3">
+              <span class="h-2 w-2 animate-bounce rounded-full bg-ai/70 [animation-delay:-0.3s]"></span>
+              <span class="h-2 w-2 animate-bounce rounded-full bg-ai/70 [animation-delay:-0.15s]"></span>
+              <span class="h-2 w-2 animate-bounce rounded-full bg-ai/70"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Composer -->
+        <form class="mt-3 flex items-end gap-2 border-t border-border pt-3" @submit.prevent="sendAiMessage">
+          <textarea
+            v-model="aiInput"
+            rows="1"
+            :placeholder="t('ai.placeholder', 'Nhập câu hỏi cho trợ lý HR...')"
+            class="max-h-28 flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            data-testid="input-ai-message"
+            @keydown.enter.exact.prevent="sendAiMessage"
+          ></textarea>
+          <button
+            type="submit"
+            :disabled="aiLoading || !aiInput.trim()"
+            class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-ai text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            :title="t('common.send', 'Gửi')"
+            data-testid="button-ai-send"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          </button>
+        </form>
+      </div>
+    </BaseDrawer>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { authService } from '../services/authService';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useNotificationStore } from '../stores/notificationStore';
+import { notificationService } from '../services/notificationService';
+import { nextTick } from 'vue';
+import BaseModal from '../components/BaseModal.vue';
+import BaseInput from '../components/BaseInput.vue';
+import BaseButton from '../components/BaseButton.vue';
+import BaseDrawer from '../components/BaseDrawer.vue';
+import { authService } from '../services/authService';
+import { aiService } from '../services/aiService';
+import { useI18n } from '../i18n';
 import ThemeToggle from '../components/ThemeToggle.vue';
 import IconDashboard from '../components/IconDashboard.vue';
 import IconUser from '../components/IconUser.vue';
@@ -300,10 +502,123 @@ import IconClock from '../components/IconClock.vue';
 import IconCalendar from '../components/IconCalendar.vue';
 import IconCash from '../components/IconCash.vue';
 import IconShield from '../components/IconShield.vue';
+import IconBriefcase from '../components/IconBriefcase.vue';
+import IconFileText from '../components/IconFileText.vue';
+import IconBox from '../components/IconBox.vue';
+import IconNewspaper from '../components/IconNewspaper.vue';
+import IconShieldCheck from '../components/IconShieldCheck.vue';
+import IconSupport from '../components/IconSupport.vue';
 
 const route = useRoute();
 const router = useRouter();
 const isMobileMenuOpen = ref(false);
+
+// Desktop sidebar collapse (persisted). On large screens the hamburger collapses
+// the sidebar to give the content full width; on small screens it opens the
+// off-canvas drawer instead.
+const isSidebarCollapsed = ref(localStorage.getItem('sidebar_collapsed') === '1');
+const toggleSidebar = () => {
+  if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+    isSidebarCollapsed.value = !isSidebarCollapsed.value;
+    localStorage.setItem('sidebar_collapsed', isSidebarCollapsed.value ? '1' : '0');
+  } else {
+    isMobileMenuOpen.value = !isMobileMenuOpen.value;
+  }
+};
+
+// Quick Add (+) — create-shortcuts gated by admin shell + module access.
+const isQuickAddOpen = ref(false);
+const quickAddContainerRef = ref(null);
+const QUICK_ADD = [
+  { label: 'Xin nghỉ phép', path: '/leaves', module: 'time', icon: IconCalendar },
+  { label: 'Đơn điều chỉnh công', path: '/attendance-adjustments', module: 'time', icon: IconClock },
+  { label: 'Đăng ký tăng ca', path: '/overtime-requests', module: 'time', icon: IconClock },
+  { label: 'Thêm nhân viên', path: '/employees', module: 'hr', icon: IconUser },
+  { label: 'Tạo hợp đồng', path: '/contracts', module: 'hr', icon: IconFileText },
+  { label: 'Checklist hội nhập', path: '/onboarding', module: 'hr', icon: IconUser },
+];
+const quickAddActions = computed(() =>
+  isAdmin.value ? QUICK_ADD.filter((a) => authService.canAccessModule(a.module)) : []
+);
+const runQuickAdd = (action) => {
+  isQuickAddOpen.value = false;
+  router.push(action.path);
+};
+
+// i18n
+const { t, locale, setLocale, availableLocales, currentLocaleLabel } = useI18n();
+
+// Language switcher dropdown
+const isLangMenuOpen = ref(false);
+const langContainerRef = ref(null);
+const toggleLangMenu = () => {
+  isLangMenuOpen.value = !isLangMenuOpen.value;
+  isNotificationsOpen.value = false;
+  isAvatarMenuOpen.value = false;
+};
+const selectLocale = (code) => {
+  setLocale(code);
+  isLangMenuOpen.value = false;
+};
+
+// ── AI assistant chat drawer ────────────────────────────────────────────────
+const isAiOpen = ref(false);
+const aiMessages = ref([]);        // { role: 'user'|'assistant', content, badge?, configured? }
+const aiInput = ref('');
+const aiLoading = ref(false);
+const aiConfigured = ref(true);    // flips false when backend reports missing key
+const aiMessagesRef = ref(null);
+
+const scrollAiToBottom = () => {
+  nextTick(() => {
+    const el = aiMessagesRef.value;
+    if (el) el.scrollTop = el.scrollHeight;
+  });
+};
+
+const openAiAssistant = () => {
+  isLangMenuOpen.value = false;
+  isNotificationsOpen.value = false;
+  isAvatarMenuOpen.value = false;
+  isAiOpen.value = true;
+  if (aiMessages.value.length === 0) {
+    aiMessages.value.push({ role: 'assistant', content: t('ai.greeting') });
+  }
+  scrollAiToBottom();
+};
+
+const sendAiMessage = async () => {
+  const text = aiInput.value.trim();
+  if (!text || aiLoading.value) return;
+
+  aiMessages.value.push({ role: 'user', content: text });
+  aiInput.value = '';
+  aiLoading.value = true;
+  scrollAiToBottom();
+
+  // Send the recent history (last ~6 turns), excluding the greeting bubble and
+  // the message we just pushed, as plain {role, content} pairs.
+  const history = aiMessages.value
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .slice(0, -1)            // drop the just-added user message (sent as `message`)
+    .slice(-6)
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  try {
+    const data = await aiService.ask(text, history);
+    aiConfigured.value = data?.configured !== false;
+    aiMessages.value.push({
+      role: 'assistant',
+      content: data?.answer || t('ai.error'),
+      configured: aiConfigured.value,
+    });
+  } catch (e) {
+    aiMessages.value.push({ role: 'assistant', content: t('ai.error') });
+  } finally {
+    aiLoading.value = false;
+    scrollAiToBottom();
+  }
+};
 
 const searchQuery = ref('');
 const isSearchFocused = ref(false);
@@ -334,18 +649,42 @@ const notificationStore = useNotificationStore();
 const storeNotifications = notificationStore.notifications;
 const storeUnreadCount = notificationStore.unreadCount;
 
+// Thông báo bền từ backend (chuông) — gộp với toast phiên hiện tại.
+const persistedNotifications = ref([]);
+const loadPersisted = async () => {
+  try {
+    persistedNotifications.value = await notificationService.getAll();
+  } catch (e) {
+    /* im lặng — chuông không chặn UI */
+  }
+};
+
 const isAdmin = computed(() => authService.isAdmin());
+const isSuperAdmin = computed(() => authService.isSuperAdmin());
 
 const notifications = computed(() => {
-  return storeNotifications.value.map(n => ({
-    id: n.id,
+  const persisted = persistedNotifications.value.map(n => ({
+    id: 'db-' + n.id,
+    _persisted: true,
+    _rawId: n.id,
+    message: n.title ? `${n.title}: ${n.message}` : n.message,
+    time: formatTime(new Date(n.created_at)),
+    read: !!n.read_at,
+  }));
+  const toasts = storeNotifications.value.map(n => ({
+    id: 'toast-' + n.id,
+    _persisted: false,
+    _rawId: n.id,
     message: n.message,
     time: formatTime(n.timestamp),
-    read: n.read
+    read: n.read,
   }));
+  return [...persisted, ...toasts];
 });
 
-const unreadCount = computed(() => storeUnreadCount.value);
+const unreadCount = computed(() =>
+  persistedNotifications.value.filter(n => !n.read_at).length + storeUnreadCount.value
+);
 
 const formatTime = (date) => {
   if (!date) return '';
@@ -368,7 +707,6 @@ const handleLogout = () => {
     router.push('/login');
   }
 };
-
 const navGroupsData = ref([
   {
     id: 'dashboard',
@@ -380,13 +718,25 @@ const navGroupsData = ref([
   },
   {
     id: 'hr',
-    label: 'Nhân sự',
+    label: 'Nhân sự & Hợp đồng',
     isOpen: true,
     items: [
       { path: '/employees', name: 'employees', label: 'Nhân viên', icon: IconUser, adminOnly: true },
-      { path: '/employment-history', name: 'employment-history', label: 'Lịch sử công tác', icon: IconUser, adminOnly: true },
+      { path: '/organization-chart', name: 'organization-chart', label: 'Sơ đồ tổ chức', icon: IconBuilding, adminOnly: true },
+      { path: '/contracts', name: 'contracts', label: 'Hợp đồng lao động', icon: IconFileText, adminOnly: true },
+      { path: '/onboarding', name: 'onboarding', label: 'Hội nhập & Nghỉ việc', icon: IconUser, adminOnly: true },
       { path: '/departments', name: 'departments', label: 'Phòng ban', icon: IconBuilding, adminOnly: true },
-      { path: '/roles', name: 'roles', label: 'Vai trò', icon: IconShield, adminOnly: true },
+      { path: '/profile-change-requests', name: 'profile-change-requests', label: 'Đơn đổi thông tin', icon: IconFileText, adminOnly: true },
+    ]
+  },
+  {
+    id: 'recruitment',
+    label: 'Tuyển dụng & AI',
+    isOpen: true,
+    items: [
+      { path: '/recruitment', name: 'recruitment', label: 'Ứng viên (Kanban)', icon: IconBriefcase, adminOnly: true },
+      { path: '/recruitment-positions', name: 'recruitment-positions', label: 'Tin tuyển dụng', icon: IconBriefcase, adminOnly: true },
+      { path: '/interviews', name: 'interviews', label: 'Lịch phỏng vấn', icon: IconCalendar, adminOnly: true }
     ]
   },
   {
@@ -395,18 +745,35 @@ const navGroupsData = ref([
     isOpen: true,
     items: [
       { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: true },
+      { path: '/timesheet', name: 'timesheet', label: 'Bảng công tháng', icon: IconClock, adminOnly: true },
+      { path: '/shifts', name: 'shifts', label: 'Ca làm việc & Xếp ca', icon: IconClock, adminOnly: true },
+      { path: '/attendance-adjustments', name: 'attendance-adjustments', label: 'Đơn điều chỉnh công', icon: IconClock, adminOnly: true },
       { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: true },
-      { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: true },
-      { path: '/work-shifts', name: 'work-shifts', label: 'Ca làm việc', icon: IconClock, adminOnly: true },
+      { path: '/holidays', name: 'holidays', label: 'Lịch nghỉ lễ', icon: IconCalendar, adminOnly: true },
+      { path: '/overtime-requests', name: 'overtime-requests', label: 'Đăng ký tăng ca', icon: IconClock, adminOnly: true },
+      { path: '/shift-swaps', name: 'shift-swaps', label: 'Yêu cầu đổi ca', icon: IconCalendar, adminOnly: true },
+      { path: '/shift-coverage', name: 'shift-coverage', label: 'Phủ ca khi vắng', icon: IconClock, adminOnly: true },
+      { path: '/requests', name: 'requests', label: 'Yêu cầu phê duyệt', icon: IconFileText, adminOnly: true },
     ]
   },
   {
     id: 'payroll',
-    label: 'Lương & Phúc lợi',
+    label: 'Lương & Báo cáo',
     isOpen: true,
     items: [
-      { path: '/salaries', name: 'salaries', label: 'Lương', icon: IconCash, adminOnly: false },
+      { path: '/salaries', name: 'salaries', label: 'Tính lương', icon: IconCash, adminOnly: true },
       { path: '/salary-components', name: 'salary-components', label: 'Thành phần lương', icon: IconCash, adminOnly: true },
+      { path: '/piece-rate', name: 'piece-rate', label: 'Công khoán sản phẩm', icon: IconCash, adminOnly: true },
+      { path: '/report-builder', name: 'report-builder', label: 'Báo cáo tùy chỉnh', icon: IconFileText, adminOnly: true }
+    ]
+  },
+  {
+    id: 'communications',
+    label: 'Truyền thông',
+    isOpen: false,
+    items: [
+      { path: '/news', name: 'news', label: 'Tin tức nội bộ', icon: IconNewspaper, adminOnly: false },
+      { path: '/policies', name: 'policies', label: 'Chính sách công ty', icon: IconShieldCheck, adminOnly: false }
     ]
   },
   {
@@ -414,31 +781,90 @@ const navGroupsData = ref([
     label: 'Cấu hình',
     isOpen: false,
     items: [
+      { path: '/settings', name: 'settings', label: 'Cấu hình nghiệp vụ', icon: IconShieldCheck, adminOnly: true },
+      { path: '/attendance-devices', name: 'attendance-devices', label: 'Máy chấm công', icon: IconClock, adminOnly: true },
       { path: '/job-families', name: 'job-families', label: 'Nhóm chức danh', icon: IconBuilding, adminOnly: true },
       { path: '/job-titles', name: 'job-titles', label: 'Chức danh', icon: IconUser, adminOnly: true },
+      { path: '/roles', name: 'roles', label: 'Vai trò & Phân quyền', icon: IconShield, adminOnly: true },
+      { path: '/legal-entities', name: 'legal-entities', label: 'Chi nhánh / Pháp nhân', icon: IconBuilding, adminOnly: true },
+      { path: '/audit-logs', name: 'audit-logs', label: 'Nhật ký hệ thống', icon: IconFileText, adminOnly: true },
+    ]
+  },
+  {
+    id: 'platform',
+    label: 'Quản trị Platform',
+    isOpen: false,
+    superAdminOnly: true,
+    items: [
+      { path: '/platform/tenants', name: 'platform-tenants', label: 'Tổ chức (Tenant)', icon: IconBuilding, adminOnly: true },
     ]
   }
 ]);
 
 const filteredGroups = computed(() => {
   if (!isAdmin.value) {
-    return [{
-      id: 'employee',
-      label: 'Nhân viên',
-      isOpen: true,
-      items: [
-        { path: '/employee-portal', name: 'employee-portal', label: 'Tổng quan', icon: IconDashboard, adminOnly: false },
-        { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: false },
-        { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: false },
-        { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: false },
-      ]
-    }];
+    return [
+      {
+        id: 'employee',
+        label: 'Nhân viên',
+        isOpen: true,
+        items: [
+          { path: '/employee-portal', name: 'employee-portal', label: 'Tổng quan Portal', icon: IconDashboard, adminOnly: false },
+          { path: '/attendance', name: 'attendance', label: 'Chấm công', icon: IconClock, adminOnly: false },
+          { path: '/leaves', name: 'leaves', label: 'Nghỉ phép', icon: IconCalendar, adminOnly: false },
+          { path: '/work-schedules', name: 'work-schedules', label: 'Lịch làm việc', icon: IconCalendar, adminOnly: false },
+        ]
+      },
+      {
+        id: 'employee-comm',
+        label: 'Truyền thông & Trợ giúp',
+        isOpen: true,
+        items: [
+          { path: '/news', name: 'news', label: 'Tin tức nội bộ', icon: IconNewspaper, adminOnly: false },
+          { path: '/policies', name: 'policies', label: 'Chính sách công ty', icon: IconShieldCheck, adminOnly: false }
+        ]
+      }
+    ];
   }
 
-  return navGroupsData.value.map(group => ({
-    ...group,
-    items: group.items.filter(item => isAdmin.value || !item.adminOnly)
-  })).filter(group => group.items.length > 0);
+  // Map sidebar groups to access modules; groups with no module (dashboard) are
+  // always shown to admin-shell users. Module-gated groups hide when the user's
+  // role doesn't grant that module (role-based access control).
+  const GROUP_MODULE = {
+    hr: 'hr', time: 'time', payroll: 'payroll',
+    recruitment: 'recruitment', communications: 'communications', settings: 'settings'
+  };
+
+  return navGroupsData.value
+    .filter(group => !group.superAdminOnly || isSuperAdmin.value)
+    .filter(group => {
+      const m = GROUP_MODULE[group.id];
+      return !m || authService.canAccessModule(m);
+    })
+    .map(group => ({
+      ...group,
+      items: group.items.filter(item => isAdmin.value || !item.adminOnly)
+    })).filter(group => group.items.length > 0);
+});
+
+const mobileNavItems = computed(() => {
+  if (isAdmin.value) {
+    return [
+      { path: '/', label: 'Tổng quan', icon: IconDashboard },
+      { path: '/attendance', label: 'Chấm công', icon: IconClock },
+      { path: '/recruitment', label: 'Tuyển dụng', icon: IconBriefcase },
+      { path: '/news', label: 'Tin tức', icon: IconNewspaper },
+      { path: '/service-tickets', label: 'Hỗ trợ', icon: IconSupport },
+    ];
+  } else {
+    return [
+      { path: '/employee-portal', label: 'Portal', icon: IconDashboard },
+      { path: '/attendance', label: 'Chấm công', icon: IconClock },
+      { path: '/leaves', label: 'Nghỉ phép', icon: IconCalendar },
+      { path: '/news', label: 'Tin tức', icon: IconNewspaper },
+      { path: '/service-tickets', label: 'Hỗ trợ', icon: IconSupport },
+    ];
+  }
 });
 
 const dashboardGroup = computed(() => filteredGroups.value.find(g => g.id === 'dashboard') || { items: [] });
@@ -500,13 +926,24 @@ const closeSearch = () => {
 
 const toggleNotifications = () => {
   isNotificationsOpen.value = !isNotificationsOpen.value;
+  if (isNotificationsOpen.value) loadPersisted();
 };
 
-const markAsRead = (id) => {
-  notificationStore.markAsRead(id);
+const markAsRead = async (id) => {
+  const n = notifications.value.find(x => x.id === id);
+  if (!n) return;
+  if (n._persisted) {
+    try { await notificationService.markRead(n._rawId); } catch (e) { /* noop */ }
+    const p = persistedNotifications.value.find(x => x.id === n._rawId);
+    if (p) p.read_at = new Date().toISOString();
+  } else {
+    notificationStore.markAsRead(n._rawId);
+  }
 };
 
-const markAllAsRead = () => {
+const markAllAsRead = async () => {
+  try { await notificationService.markAllRead(); } catch (e) { /* noop */ }
+  persistedNotifications.value.forEach(n => { if (!n.read_at) n.read_at = new Date().toISOString(); });
   notificationStore.markAllAsRead();
 };
 
@@ -519,6 +956,12 @@ const handleClickOutside = (event) => {
   }
   if (avatarContainerRef.value && !avatarContainerRef.value.contains(event.target)) {
     isAvatarMenuOpen.value = false;
+  }
+  if (langContainerRef.value && !langContainerRef.value.contains(event.target)) {
+    isLangMenuOpen.value = false;
+  }
+  if (quickAddContainerRef.value && !quickAddContainerRef.value.contains(event.target)) {
+    isQuickAddOpen.value = false;
   }
 };
 
@@ -553,9 +996,7 @@ const submitChangePassword = async () => {
   }
   pwLoading.value = true;
   try {
-    const axiosModule = await import('../services/axiosClient.js');
-    const axiosClient = axiosModule.default;
-    await axiosClient.patch(`/users/${user.id}`, { password: pwForm.value.newPassword });
+    await authService.changePassword(pwForm.value.newPassword);
     pwSuccess.value = 'Đổi mật khẩu thành công! Vui lòng đăng nhập lại.';
     setTimeout(() => { showChangePasswordModal.value = false; authService.logout(); }, 2000);
   } catch (err) {
@@ -565,11 +1006,15 @@ const submitChangePassword = async () => {
   }
 };
 
+let notifPoll = null;
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
+  loadPersisted();
+  notifPoll = setInterval(loadPersisted, 60000);
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
+  if (notifPoll) clearInterval(notifPoll);
 });
 </script>

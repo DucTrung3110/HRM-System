@@ -62,6 +62,21 @@
       </BaseTable>
     </BaseCard>
 
+    <!-- Yêu cầu đổi ca của tôi (nhân viên) -->
+    <BaseCard v-if="!isAdmin">
+      <h3 class="font-semibold mb-3">Yêu cầu đổi ca của tôi</h3>
+      <div v-if="mySwaps.length === 0" class="text-sm text-muted-foreground">Chưa có yêu cầu đổi ca nào.</div>
+      <div v-else class="space-y-2">
+        <div v-for="sw in mySwaps" :key="sw.id" class="flex flex-wrap items-center justify-between gap-3 border border-border rounded-lg p-3">
+          <div class="min-w-0 text-sm">
+            <p class="font-medium text-foreground">Ngày {{ formatDate(sw.swap_date) }} · đổi với {{ getEmployeeName(sw.target_employee_id) }}</p>
+            <p v-if="sw.reason" class="text-xs text-muted-foreground">Lý do: {{ sw.reason }}</p>
+          </div>
+          <BaseBadge :variant="swapStatusVariant(sw.approval_status)">{{ swapStatusText(sw.approval_status) }}</BaseBadge>
+        </div>
+      </div>
+    </BaseCard>
+
     <BaseModal v-model="showCreateModal" title="Lên lịch làm việc">
       <div class="space-y-4">
         <BaseSelect
@@ -81,30 +96,28 @@
       </div>
     </BaseModal>
 
-    <BaseModal v-model="showShiftChangeModal" title="Xin đổi ca làm việc">
+    <BaseModal v-model="showShiftChangeModal" title="Xin đổi ca với đồng nghiệp">
       <div class="space-y-4">
         <div class="p-3 bg-muted rounded-lg">
-          <p class="text-sm text-muted-foreground">Nhân viên</p>
+          <p class="text-sm text-muted-foreground">Người yêu cầu</p>
           <p class="font-medium">{{ currentUser?.full_name || currentUser?.email || 'Bạn' }}</p>
         </div>
-        <BaseInput 
-          v-model="shiftChangeForm.current_date" 
-          type="date" 
-          label="Ngày muốn đổi" 
-          required 
-        />
-        <BaseSelect
-          v-model="shiftChangeForm.current_shift_id"
-          :options="shiftOptions"
-          label="Ca hiện tại"
+        <BaseInput
+          v-model="shiftChangeForm.swap_date"
+          type="date"
+          label="Ngày muốn đổi ca"
           required
         />
         <BaseSelect
-          v-model="shiftChangeForm.requested_shift_id"
-          :options="shiftOptions"
-          label="Ca muốn đổi sang"
+          v-model="shiftChangeForm.target_employee_id"
+          :options="colleagueOptions"
+          label="Đổi ca với đồng nghiệp"
+          placeholder="Chọn đồng nghiệp"
           required
         />
+        <p class="text-xs text-muted-foreground -mt-2">
+          Hệ thống sẽ hoán đổi ca của hai người trong đúng ngày đã chọn sau khi quản lý duyệt (ca cố định các ngày khác giữ nguyên).
+        </p>
         <div>
           <label class="block text-sm font-medium text-foreground mb-2">Lý do</label>
           <textarea
@@ -157,14 +170,24 @@ const showCreateModal = ref(false);
 const showShiftChangeModal = ref(false);
 
 const shiftChangeForm = ref({
-  current_date: '',
-  current_shift_id: '',
-  requested_shift_id: '',
+  swap_date: '',
+  target_employee_id: '',
   reason: ''
 });
 const shiftChangeLoading = ref(false);
 const shiftChangeError = ref('');
 const shiftChangeSuccess = ref('');
+
+// Đồng nghiệp để chọn đổi ca (trừ chính mình) + danh sách yêu cầu đổi ca của tôi.
+const colleagueOptions = ref([]);
+const mySwaps = ref([]);
+
+const swapStatusText = (s) => ({
+  PENDING: 'Chờ duyệt', 'CHỜ_DUYỆT': 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Từ chối',
+}[s] || s || 'Chờ duyệt');
+const swapStatusVariant = (s) => ({
+  PENDING: 'warning', 'CHỜ_DUYỆT': 'warning', APPROVED: 'success', REJECTED: 'destructive',
+}[s] || 'warning');
 
 const filters = ref({
   employee: '',
@@ -330,45 +353,62 @@ const saveItem = async () => {
   }
 };
 
+const loadColleagues = async () => {
+  try {
+    const response = await employeeService.getAll({ per_page: 500 });
+    const employees = response?.data || response || [];
+    const myId = currentUser.value?.employee_id;
+    colleagueOptions.value = employees
+      .filter((e) => String(e.id) !== String(myId))
+      .map((e) => ({ value: e.id, label: e.full_name }));
+    employees.forEach((e) => { employeeMap.value[e.id] = e.full_name; });
+  } catch (err) {
+    console.error('Error loading colleagues:', err);
+  }
+};
+
+const loadMySwaps = async () => {
+  const myId = currentUser.value?.employee_id;
+  if (!myId) return;
+  try {
+    const res = await workScheduleService.getSwaps({ requester_id: myId });
+    mySwaps.value = res?.data || res || [];
+  } catch (err) {
+    console.error('Error loading my swaps:', err);
+    mySwaps.value = [];
+  }
+};
+
 const submitShiftChangeRequest = async () => {
   shiftChangeError.value = '';
   shiftChangeSuccess.value = '';
-  
-  if (!shiftChangeForm.value.current_date) {
-    shiftChangeError.value = 'Vui lòng chọn ngày muốn đổi';
-    return;
-  }
-  if (!shiftChangeForm.value.current_shift_id) {
-    shiftChangeError.value = 'Vui lòng chọn ca hiện tại';
-    return;
-  }
-  if (!shiftChangeForm.value.requested_shift_id) {
-    shiftChangeError.value = 'Vui lòng chọn ca muốn đổi sang';
-    return;
-  }
-  if (shiftChangeForm.value.current_shift_id === shiftChangeForm.value.requested_shift_id) {
-    shiftChangeError.value = 'Ca muốn đổi phải khác ca hiện tại';
-    return;
-  }
-  
+
+  const myId = currentUser.value?.employee_id;
+  if (!myId) { shiftChangeError.value = 'Tài khoản chưa liên kết hồ sơ nhân viên'; return; }
+  if (!shiftChangeForm.value.swap_date) { shiftChangeError.value = 'Vui lòng chọn ngày muốn đổi ca'; return; }
+  if (!shiftChangeForm.value.target_employee_id) { shiftChangeError.value = 'Vui lòng chọn đồng nghiệp muốn đổi ca'; return; }
+  if (String(shiftChangeForm.value.target_employee_id) === String(myId)) { shiftChangeError.value = 'Không thể đổi ca với chính mình'; return; }
+
   try {
     shiftChangeLoading.value = true;
-    
-    shiftChangeSuccess.value = 'Yêu cầu đổi ca đã được gửi thành công! Vui lòng chờ phê duyệt từ quản lý.';
-    
+    await workScheduleService.requestSwap({
+      requester_id: myId,
+      target_employee_id: parseInt(shiftChangeForm.value.target_employee_id),
+      swap_date: shiftChangeForm.value.swap_date,
+      reason: shiftChangeForm.value.reason || '',
+    });
+    shiftChangeSuccess.value = 'Yêu cầu đổi ca đã được gửi! Vui lòng chờ quản lý phê duyệt.';
+    await loadMySwaps();
     setTimeout(() => {
-      shiftChangeForm.value = {
-        current_date: '',
-        current_shift_id: '',
-        requested_shift_id: '',
-        reason: ''
-      };
+      shiftChangeForm.value = { swap_date: '', target_employee_id: '', reason: '' };
       shiftChangeSuccess.value = '';
       showShiftChangeModal.value = false;
-    }, 2000);
+    }, 1500);
   } catch (err) {
-    console.error('Error submitting shift change request:', err);
-    shiftChangeError.value = err.response?.data?.error || 'Có lỗi xảy ra khi gửi yêu cầu';
+    console.error('Error submitting shift swap request:', err);
+    shiftChangeError.value = err.response?.data?.data?.errors
+      ? Object.values(err.response.data.data.errors)[0]?.[0]
+      : (err.response?.data?.message || 'Có lỗi xảy ra khi gửi yêu cầu');
   } finally {
     shiftChangeLoading.value = false;
   }
@@ -382,6 +422,8 @@ onMounted(async () => {
   const promises = [loadData(), loadShifts()];
   if (isAdmin.value) {
     promises.push(loadEmployees());
+  } else {
+    promises.push(loadColleagues(), loadMySwaps());
   }
   await Promise.all(promises);
 });

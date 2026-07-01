@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import api from '@/services/api';
+import { employeeService } from '@/services/employeeService';
 import BaseCard from '@/components/BaseCard.vue';
 
 const employee = ref<any>(null);
@@ -70,8 +70,8 @@ const user = JSON.parse(localStorage.getItem('user') || '{}');
 onMounted(async () => {
   try {
     // Assuming user has employee_id
-    const response = await api.get(`/employees/${user.id}`);
-    employee.value = response.data;
+    const response = await employeeService.getById(user.id);
+    employee.value = response.data || response;
   } catch (error) {
     console.error('Failed to load employee info', error);
   }
