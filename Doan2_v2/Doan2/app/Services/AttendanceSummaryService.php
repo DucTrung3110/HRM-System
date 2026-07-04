@@ -202,12 +202,19 @@ class AttendanceSummaryService
      */
     private function leaveDays(int $employeeId, string $start, string $end, int $tenantId): float
     {
+        // Đơn nghỉ VẮT qua 2 tháng: chỉ tính phần ngày RƠI TRONG kỳ (clamp theo
+        // giao của [start_date,end_date] với kỳ), tránh cộng full total_days vào
+        // cả hai kỳ (đếm trùng). Cap tại total_days (đơn nửa ngày).
         return (float) DB::table('leave_requests')
             ->where('tenant_id', $tenantId)
             ->where('employee_id', $employeeId)
             ->whereIn('status', self::APPROVED_STATUSES)
             ->where('start_date', '<=', $end)
             ->where('end_date', '>=', $start)
-            ->sum('total_days');
+            ->selectRaw(
+                'COALESCE(SUM(LEAST(total_days, (LEAST(end_date, ?::date) - GREATEST(start_date, ?::date) + 1))), 0) AS d',
+                [$end, $start]
+            )
+            ->value('d');
     }
 }

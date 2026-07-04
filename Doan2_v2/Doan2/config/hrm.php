@@ -116,6 +116,10 @@ return [
         // lương thực tế (tổng lương NV). 0 = chưa đặt, không hiển thị cảnh báo.
         'monthly_budget' => env('HRM_PAYROLL_MONTHLY_BUDGET', 0),
 
+        // Phụ trội làm ĐÊM (Đ.98 BLLĐ: ít nhất +30% đơn giá giờ) — cộng thêm
+        // cho mỗi giờ đêm trong đơn OT (meta.night_hours), ngoài hệ số ngày.
+        'night_ot_premium' => env('HRM_PAYROLL_NIGHT_PREMIUM', 0.3),
+
         // When true, base pay is prorated by actual_working_days / standard_days
         // (or by unpaid_leave_days) from the attendance summary.
         'prorate_by_attendance' => env('HRM_PAYROLL_PRORATE', true),

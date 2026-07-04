@@ -28,3 +28,6 @@ stats_resp.json
 # Agent / tooling artifacts
 .agents/
 ..agents/
+
+# Word lock files
+~$*.docx

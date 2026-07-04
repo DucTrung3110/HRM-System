@@ -43,6 +43,7 @@ class SettingsController extends Controller
                 ['key' => 'payroll.region_min_wage', 'label' => 'Lương tối thiểu vùng (VNĐ)', 'type' => 'int'],
                 ['key' => 'payroll.overtime_multiplier', 'label' => 'Hệ số tăng ca (×)', 'type' => 'float'],
                 ['key' => 'payroll.ot_premium_tax_exempt', 'label' => 'Miễn thuế TNCN phần phụ trội tăng ca/đêm', 'type' => 'bool'],
+                ['key' => 'payroll.night_ot_premium', 'label' => 'Phụ trội giờ làm đêm (0.3 = +30%)', 'type' => 'float'],
                 ['key' => 'payroll.monthly_budget', 'label' => 'Ngân sách quỹ lương tháng toàn công ty (VNĐ, 0 = chưa đặt)', 'type' => 'int'],
                 ['key' => 'payroll.prorate_by_attendance', 'label' => 'Trừ lương theo ngày công vắng (prorate)', 'type' => 'bool'],
                 ['key' => 'payroll.standard_hours_per_day', 'label' => 'Giờ làm chuẩn / ngày', 'type' => 'int'],

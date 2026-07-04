@@ -200,6 +200,9 @@ class PayrollRunService
                 // đơn (fallback: overtime_multiplier trong config). OT đã quy đổi
                 // nghỉ bù thì không trả tiền (tránh hưởng kép).
                 $defaultOtMultiplier = (float) HrmConfig::get('payroll.overtime_multiplier', 1.5);
+                // Phụ trội làm ĐÊM (Đ.98 BLLĐ: ít nhất +30% đơn giá) — cộng thêm
+                // trên mỗi giờ đêm (meta.night_hours) NGOÀI hệ số ngày.
+                $nightPremium = (float) HrmConfig::get('payroll.night_ot_premium', 0.3);
                 $otRows = DB::table('overtime_requests')
                     ->where('tenant_id', $tenantId)
                     ->where('employee_id', $employeeId)
@@ -226,6 +229,10 @@ class PayrollRunService
                     }
                     $overtimeHours += $h;
                     $weightedOtHours += $h * $factor;
+                    $nightHours = (float) ($otMeta['night_hours'] ?? 0);
+                    if ($nightHours > 0 && $nightPremium > 0) {
+                        $weightedOtHours += min($nightHours, $h) * $nightPremium;
+                    }
                 }
 
                 $overtimePay = 0.0;
