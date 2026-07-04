@@ -70,8 +70,14 @@ class LeavePolicyService
                 'max_days_per_event' => (int) HrmConfig::get('leave.unpaid_personal_days', 1),
                 'statutory_ref' => 'Điều 115.2'],
             'MATERNITY' => ['paid' => true, 'accrual' => 'per_event', 'requires_balance' => false,
-                'max_days_per_event' => (int) HrmConfig::get('leave.maternity_days', 180),
-                'statutory_ref' => 'Điều 139'],
+                // Trần = mức cao nhất giữa thai sản thường (6 tháng) và sinh con
+                // thứ hai (7 tháng — luật hiệu lực 01/07/2026). Số ngày thực tế
+                // của từng đơn do HR nhập; policy chỉ chặn trần.
+                'max_days_per_event' => max(
+                    (int) HrmConfig::get('leave.maternity_days', 180),
+                    (int) HrmConfig::get('leave.maternity_days_second_child', 210)
+                ),
+                'statutory_ref' => 'Điều 139 + luật 01/07/2026 (con thứ 2: 7 tháng)'],
             'MARRIAGE' => ['paid' => true, 'accrual' => 'per_event', 'requires_balance' => false,
                 'max_days_per_event' => (int) HrmConfig::get('leave.marriage_self_days', 3),
                 'statutory_ref' => 'Điều 115.1.a'],

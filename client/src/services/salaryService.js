@@ -46,6 +46,16 @@ export const salaryService = {
     const response = await axiosClient.post(`/salary-periods/${id}/close`);
     return response.data;
   },
+  // Chạy engine tính lương VN cho một kỳ (idempotent với kỳ đang mở)
+  runPayroll: async (periodId) => {
+    const response = await axiosClient.post('/payroll/run', { salary_period_id: periodId });
+    return response.data;
+  },
+  // Phiếu lương chi tiết (salary_detail + breakdowns + công tháng)
+  getPayslip: async (detailId) => {
+    const response = await axiosClient.get(`/salary-details/${detailId}/payslip`);
+    return response.data;
+  },
 
   // --- Details ---
   getDetails: async (params) => {

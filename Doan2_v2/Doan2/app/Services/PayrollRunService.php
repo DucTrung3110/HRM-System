@@ -25,12 +25,13 @@ use RuntimeException;
  */
 class PayrollRunService
 {
-    /** Period statuses that forbid (re)computation. */
-    private const LOCKED_PERIOD_STATUSES = ['CLOSED', 'LOCKED', 'ĐÃ_ĐÓNG', 'DA_DONG'];
+    /** Period statuses that forbid (re)computation (đã chốt hoặc đã chi trả). */
+    private const LOCKED_PERIOD_STATUSES = ['CLOSED', 'LOCKED', 'PAID', 'ĐÃ_ĐÓNG', 'DA_DONG', 'ĐÃ_TRẢ', 'DA_TRA'];
 
     public function __construct(
         private readonly PayrollTaxService $tax,
         private readonly InsuranceService $insurance,
+        private readonly AttendanceSummaryService $attendanceSummary,
     ) {}
 
     /**
@@ -58,6 +59,11 @@ class PayrollRunService
         $legalEntityId = (int) $period->legal_entity_id;
         $periodStart = (string) $period->start_date;
         $periodEnd = (string) $period->end_date;
+
+        // Đồng bộ: rebuild bảng công tháng NGAY TRƯỚC khi tính lương để mọi
+        // thay đổi chấm công / đơn từ mới duyệt đều được phản ánh (tránh tính
+        // lương trên summary cũ). Idempotent — upsert theo (tenant, NV, kỳ).
+        $this->attendanceSummary->build($salaryPeriodId);
 
         $allowancesTaxable = (bool) HrmConfig::get('payroll.allowances_taxable_by_default', true);
 
@@ -154,37 +160,96 @@ class PayrollRunService
                     ->first();
 
                 // Proration: scale base + allowances by paid-days / standard-days.
+                // Ngày KHÔNG lương = nghỉ không lương (unpaid_leave_days) + vắng
+                // không phép (ABSENT, lấy từ summary meta.absent_days). Nghỉ CÓ
+                // phép (paid_leave_days) KHÔNG bị trừ. Ngày thiếu bản ghi chấm công
+                // không tính là vắng (tránh trừ oan khi dữ liệu chấm công chưa đủ).
                 $prorate = (bool) HrmConfig::get('payroll.prorate_by_attendance', true);
                 $prorationFactor = 1.0;
                 $prorationLabel = 'NONE_FULL_MONTH';
+                $unpaidLeaveDays = 0.0;
+                $absentDays = 0.0;
 
                 if ($prorate && $attendance) {
                     $standardDays = (float) ($attendance->standard_days ?? 0);
                     $unpaidLeaveDays = (float) ($attendance->unpaid_leave_days ?? 0);
 
-                    if ($standardDays > 0 && $unpaidLeaveDays > 0) {
-                        $paidDays = max(0.0, $standardDays - $unpaidLeaveDays);
+                    $summaryMeta = [];
+                    if (! empty($attendance->meta)) {
+                        $summaryMeta = is_string($attendance->meta)
+                            ? (json_decode($attendance->meta, true) ?: [])
+                            : (array) $attendance->meta;
+                    }
+                    $absentDays = (float) ($summaryMeta['absent_days'] ?? 0);
+
+                    $unpaidDays = $unpaidLeaveDays + $absentDays;
+
+                    if ($standardDays > 0 && $unpaidDays > 0) {
+                        $paidDays = max(0.0, $standardDays - $unpaidDays);
                         $prorationFactor = round($paidDays / $standardDays, 6);
-                        $prorationLabel = "PRORATED {$paidDays}/{$standardDays}";
+                        $prorationLabel = "PRORATED {$paidDays}/{$standardDays} (nghỉ KL {$unpaidLeaveDays} + vắng {$absentDays})";
                     }
                 }
 
                 $proratedBase = round($baseSalary * $prorationFactor, 4);
                 $proratedAllowance = round($allowanceTotal * $prorationFactor, 4);
 
-                // Overtime earning: hourly rate from monthly base × OT multiplier.
-                $overtimeHours = $attendance ? (float) ($attendance->overtime_hours ?? 0) : 0.0;
+                // Overtime earning — tính theo HỆ SỐ RIÊNG của từng đơn OT
+                // (ngày thường 150%, thứ Bảy/CN 200%, lễ 300%: Bộ luật LĐ Đ.98)
+                // thay vì áp một hệ số phẳng. Hệ số lấy từ meta.pay_factor của
+                // đơn (fallback: overtime_multiplier trong config). OT đã quy đổi
+                // nghỉ bù thì không trả tiền (tránh hưởng kép).
+                $defaultOtMultiplier = (float) HrmConfig::get('payroll.overtime_multiplier', 1.5);
+                $otRows = DB::table('overtime_requests')
+                    ->where('tenant_id', $tenantId)
+                    ->where('employee_id', $employeeId)
+                    ->whereIn('status', ['APPROVED', 'ĐÃ_DUYỆT'])
+                    ->whereBetween('work_date', [$periodStart, $periodEnd])
+                    ->whereRaw("COALESCE((meta->>'converted_to_comp_off')::boolean, false) = false")
+                    ->get(['total_hours', 'meta']);
+
+                $overtimeHours = 0.0;      // tổng giờ OT thô (để hiển thị)
+                $weightedOtHours = 0.0;    // tổng giờ đã nhân hệ số (để tính tiền)
+                foreach ($otRows as $ot) {
+                    $h = (float) ($ot->total_hours ?? 0);
+                    if ($h <= 0) {
+                        continue;
+                    }
+                    $otMeta = [];
+                    if (! empty($ot->meta)) {
+                        $otMeta = is_string($ot->meta) ? (json_decode($ot->meta, true) ?: []) : (array) $ot->meta;
+                    }
+                    $factor = $otMeta['pay_factor'] ?? $otMeta['multiplier'] ?? $defaultOtMultiplier;
+                    $factor = (float) $factor;
+                    if ($factor <= 0) {
+                        $factor = $defaultOtMultiplier;
+                    }
+                    $overtimeHours += $h;
+                    $weightedOtHours += $h * $factor;
+                }
+
                 $overtimePay = 0.0;
-                if ($overtimeHours > 0) {
+                $otBasePay = 0.0;     // phần bằng đơn giá giờ thường (100%) — chịu thuế
+                $otPremiumPay = 0.0;  // phần phụ trội (50/100/200%…) — MIỄN thuế TNCN
+                if ($weightedOtHours > 0) {
                     $stdDaysForRate = $attendance && (float) ($attendance->standard_days ?? 0) > 0
                         ? (float) $attendance->standard_days
                         : 26.0;
                     $hoursPerDay = (float) HrmConfig::get('payroll.standard_hours_per_day', 8);
-                    $otMultiplier = (float) HrmConfig::get('payroll.overtime_multiplier', 1.5);
                     $monthlyHours = max(1.0, $stdDaysForRate * $hoursPerDay);
                     $hourlyRate = $baseSalary / $monthlyHours;
-                    $overtimePay = round($overtimeHours * $hourlyRate * $otMultiplier, 4);
+                    // Hệ số đã nằm trong weightedOtHours nên không nhân lại.
+                    $overtimePay = round($weightedOtHours * $hourlyRate, 4);
+                    // Miễn thuế TNCN phần trả CAO HƠN đơn giá giờ thường của tiền
+                    // làm thêm giờ / làm đêm (TT 111/2013 Đ.3; nhấn lại trong đợt
+                    // luật hiệu lực 01/07/2026). Ví dụ OT 150%: 100% chịu thuế,
+                    // 50% phụ trội miễn thuế.
+                    $otBasePay = round($overtimeHours * $hourlyRate, 4);
+                    $otPremiumPay = round(max(0.0, $overtimePay - $otBasePay), 4);
                 }
+                $otPremiumExempt = (bool) HrmConfig::get('payroll.ot_premium_tax_exempt', true);
+                // Phần OT tính vào thu nhập CHỊU THUẾ.
+                $overtimeTaxable = $otPremiumExempt ? $otBasePay : $overtimePay;
 
                 // Công khoán theo sản phẩm (piece-rate): tổng sản lượng trong kỳ.
                 $pieceRatePay = (float) DB::table('piece_rate_entries')
@@ -195,9 +260,11 @@ class PayrollRunService
 
                 // gross floored at 0 — never persist a negative payslip.
                 $gross = round(max(0.0, $proratedBase + $proratedAllowance + $overtimePay + $pieceRatePay - $fixedDeductions), 4);
+                // Thu nhập chịu thuế: dùng $overtimeTaxable (đã loại phần phụ trội
+                // OT được miễn thuế) thay vì toàn bộ $overtimePay.
                 $grossTaxable = $allowancesTaxable
-                    ? $gross
-                    : round(max(0.0, $proratedBase + $overtimePay + $pieceRatePay - $fixedDeductions), 4);
+                    ? round(max(0.0, $proratedBase + $proratedAllowance + $overtimeTaxable + $pieceRatePay - $fixedDeductions), 4)
+                    : round(max(0.0, $proratedBase + $overtimeTaxable + $pieceRatePay - $fixedDeductions), 4);
 
                 // Active dependents registered within the period window.
                 // status is mixed-encoded across data ('true','1','ACTIVE',NULL);
@@ -235,10 +302,16 @@ class PayrollRunService
                     'base_salary' => $baseSalary,
                     'prorated_base' => $proratedBase,
                     'proration_factor' => $prorationFactor,
+                    'proration_unpaid_leave_days' => $unpaidLeaveDays,
+                    'proration_absent_days' => $absentDays,
                     'allowance_total' => $allowanceTotal,
                     'prorated_allowance' => $proratedAllowance,
                     'overtime_hours' => $overtimeHours,
+                    'overtime_weighted_hours' => $weightedOtHours,
                     'overtime_pay' => $overtimePay,
+                    'overtime_base_pay' => $otBasePay,
+                    'overtime_premium_pay' => $otPremiumPay,
+                    'overtime_premium_tax_exempt' => $otPremiumExempt,
                     'piece_rate_pay' => $pieceRatePay,
                     'fixed_deduction_total' => $fixedDeductions,
                     'gross' => $gross,
@@ -281,6 +354,7 @@ class PayrollRunService
                     ['EARNING', 'BASE', 'Lương cơ bản (theo công)', $proratedBase],
                     ['EARNING', 'ALLOWANCE', 'Phụ cấp', $proratedAllowance],
                     ['EARNING', 'OVERTIME', 'Tăng ca', $overtimePay],
+                    ['INFO', 'OT_EXEMPT', 'Phụ trội tăng ca (miễn thuế TNCN)', $otPremiumExempt ? $otPremiumPay : 0.0],
                     ['EARNING', 'PIECE_RATE', 'Công khoán sản phẩm', $pieceRatePay],
                     ['DEDUCTION', 'INS_BHXH', 'BHXH (8%)', $empInsurance['bhxh']],
                     ['DEDUCTION', 'INS_BHYT', 'BHYT (1.5%)', $empInsurance['bhyt']],

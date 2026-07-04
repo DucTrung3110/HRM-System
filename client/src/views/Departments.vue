@@ -24,7 +24,12 @@
       </div>
       <div class="rounded-lg border border-border p-3 col-span-2 sm:col-span-1">
         <p class="text-2xl font-bold text-primary">{{ formatCurrency(orgSummary.totalSalary) }}</p>
-        <p class="text-xs text-muted-foreground">Quỹ lương tháng (toàn công ty)</p>
+        <p class="text-xs text-muted-foreground">Quỹ lương tháng (toàn công ty) — tính từ lương NV</p>
+        <p v-if="companyBudget > 0" class="text-xs mt-1 font-medium"
+           :class="companyBudgetPct > 100 ? 'text-red-600' : (companyBudgetPct >= 90 ? 'text-amber-600' : 'text-emerald-600')">
+          {{ companyBudgetPct }}% ngân sách ({{ formatCurrency(companyBudget) }}){{ companyBudgetPct > 100 ? ' — vượt!' : '' }}
+        </p>
+        <p v-else class="text-[11px] text-muted-foreground mt-1">Đặt ngân sách tại Cấu hình nghiệp vụ → BHXH &amp; Lương</p>
       </div>
     </div>
 
@@ -354,6 +359,7 @@ import BaseModal from '../components/BaseModal.vue';
 import IconBuilding from '../components/IconBuilding.vue';
 import { departmentService } from '../services/departmentService';
 import { employeeService } from '../services/employeeService';
+import { settingsService } from '../services/settingsService';
 import { useNotificationStore } from '../stores/notificationStore';
 
 const notificationStore = useNotificationStore();
@@ -439,6 +445,18 @@ const formatCurrency = (v) => new Intl.NumberFormat('vi-VN', { style: 'currency'
 
 const loadCostSummary = async () => {
   try { costByDept.value = await departmentService.getCostSummary(); } catch (e) { costByDept.value = {}; }
+};
+
+// Ngân sách quỹ lương toàn công ty — cấu hình tenant (payroll.monthly_budget).
+const companyBudget = ref(0);
+const companyBudgetPct = computed(() =>
+  companyBudget.value > 0 ? Math.round((orgSummary.value.totalSalary / companyBudget.value) * 100) : null
+);
+const loadCompanyBudget = async () => {
+  try {
+    const map = await settingsService.getEffectiveMap();
+    companyBudget.value = Number(map['payroll.monthly_budget'] || 0);
+  } catch { companyBudget.value = 0; }
 };
 
 const orgSummary = computed(() => ({
@@ -954,6 +972,7 @@ onMounted(async () => {
     loading.value = true;
     error.value = '';
     
+    loadCompanyBudget(); // không chặn render — chỉ bổ sung % ngân sách
     const [deptsRes, empsRes] = await Promise.all([
       departmentService.getAll(),
       employeeService.getAll()

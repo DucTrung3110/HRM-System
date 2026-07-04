@@ -120,6 +120,17 @@ class PayrollController extends Controller
 
         $period->update($data);
 
+        // Dong bo: ky chuyen sang DA TRA (PAID) nghia la tien da chuyen cho toan
+        // bo nhan vien -> moi phieu luong con PENDING phai thanh PAID (tranh lech
+        // kieu 19 phieu PAID + 1 phieu "cho chuyen" mo coi trong ky da tra).
+        $newStatus = strtoupper((string) ($data['status'] ?? ''));
+        if (in_array($newStatus, ['PAID', 'DA_TRA'], true) || $newStatus === 'ĐÃ_TRẢ') {
+            DB::table('salary_details')
+                ->where('period_id', $period->id)
+                ->where('transfer_status', 'PENDING')
+                ->update(['transfer_status' => 'PAID', 'updated_at' => now()]);
+        }
+
         return $this->ok($period->fresh(), 'Ká»³ lÆ°Æ¡ng Ä‘Ã£ Ä‘Æ°á»£c cáº­p nháº­t');
     }
 
@@ -228,8 +239,11 @@ class PayrollController extends Controller
                 ->where('salary_detail_id', $id)
                 ->orderBy('item_type')
                 ->get(),
+            // Summary công tháng khớp theo (nhân viên, kỳ) — bảng không có cột
+            // salary_detail_id (query cũ theo cột đó luôn lỗi SQL).
             'attendance_summary' => DB::table('salary_attendance_summary')
-                ->where('salary_detail_id', $id)
+                ->where('employee_id', $detail->employee_id)
+                ->where('period_id', $detail->period_id)
                 ->first(),
         ];
 

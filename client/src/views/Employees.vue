@@ -198,7 +198,7 @@
             {{ step }}
           </div>
           <span class="text-xs font-semibold mt-2 absolute -bottom-5 w-24 text-center" :class="currentStep >= step ? 'text-primary' : 'text-muted-foreground'">
-            {{ step === 1 ? 'Cá nhân' : (step === 2 ? 'Công việc' : 'Tài khoản') }}
+            {{ step === 1 ? 'Cá nhân' : (step === 2 ? 'Công việc' : 'Hồ sơ') }}
           </span>
         </div>
       </div>
@@ -208,13 +208,22 @@
         <div v-show="currentStep === 1" class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <BaseInput v-model="form.employee_code" label="Mã nhân viên" required disabled />
           <BaseInput v-model="form.full_name" label="Họ và tên" required />
-          <BaseInput v-model="form.work_email" label="Email công ty" type="email" />
+          <BaseInput v-model="form.work_email" label="Email công ty" type="email" required />
           <BaseInput v-model="form.personal_email" label="Email cá nhân" type="email" />
           <BaseInput v-model="form.phone" label="Số điện thoại" />
           <BaseInput v-model="form.date_of_birth" label="Ngày sinh" type="date" />
           <BaseSelect v-model="form.gender" label="Giới tính" :options="genderOptions" />
+          <BaseInput v-model="form.ethnicity" label="Dân tộc" />
+          <BaseInput v-model="form.religion" label="Tôn giáo" />
+          <BaseSelect v-model="form.marital_status" label="Tình trạng hôn nhân" :options="maritalStatusOptions" />
+          <BaseInput v-model="form.nationality_name" label="Quốc tịch" />
+          <BaseInput v-model="form.hometown" label="Quê quán" />
+          <BaseInput v-model="form.education_level" label="Trình độ học vấn" />
           <div class="md:col-span-2">
             <BaseInput v-model="form.address" label="Địa chỉ" />
+          </div>
+          <div class="md:col-span-2">
+            <BaseInput v-model="form.permanent_address" label="Địa chỉ thường trú" />
           </div>
         </div>
 
@@ -222,15 +231,42 @@
         <div v-show="currentStep === 2" class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <BaseSelect v-model="form.department_id" label="Phòng ban" :options="departmentOptions" />
           <BaseSelect v-model="form.job_title_id" label="Chức danh" :options="jobTitleOptions" />
+          <BaseSelect v-model="form.manager_id" label="Quản lý trực tiếp" :options="managerOptions" />
           <BaseInput v-model="form.hire_date" label="Ngày vào làm" type="date" />
+          <BaseInput v-model="form.probation_end_date" label="Ngày hết thử việc" type="date" />
           <BaseSelect v-model="form.employment_status" label="Trạng thái làm việc" :options="employmentStatusOptions" />
           <BaseSelect v-model="form.employment_type" label="Loại hình làm việc" :options="employmentTypeOptions" />
         </div>
 
-        <!-- Step 3: Tài khoản ngân hàng -->
-        <div v-show="currentStep === 3" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <BaseInput v-model="form.bank_name" label="Ngân hàng" />
-          <BaseInput v-model="form.bank_account" label="Số tài khoản" />
+        <!-- Step 3: Hồ sơ & liên hệ -->
+        <div v-show="currentStep === 3" class="space-y-5">
+          <div>
+            <p class="text-sm font-semibold mb-3">Giấy tờ tùy thân & thuế/BHXH</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <BaseInput v-model="form.id_number" label="CMND/CCCD" />
+              <BaseInput v-model="form.id_issue_date" label="Ngày cấp" type="date" />
+              <BaseInput v-model="form.id_issue_place" label="Nơi cấp" />
+              <BaseInput v-model="form.tax_number" label="Mã số thuế cá nhân" />
+              <BaseInput v-model="form.insurance_number" label="Số sổ BHXH" />
+            </div>
+          </div>
+
+          <div>
+            <p class="text-sm font-semibold mb-3">Tài khoản ngân hàng</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <BaseInput v-model="form.bank_name" label="Ngân hàng" />
+              <BaseInput v-model="form.bank_account" label="Số tài khoản" />
+            </div>
+          </div>
+
+          <div>
+            <p class="text-sm font-semibold mb-3">Liên hệ khẩn cấp</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <BaseInput v-model="form.emergency_contact_name" label="Họ tên" />
+              <BaseInput v-model="form.emergency_contact_relationship" label="Mối quan hệ" />
+              <BaseInput v-model="form.emergency_contact_phone" label="Số điện thoại" />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -336,6 +372,10 @@ const handleNextStep = () => {
     formError.value = 'Vui lòng nhập họ và tên';
     return;
   }
+  if (currentStep.value === 1 && !form.value.work_email?.trim()) {
+    formError.value = 'Vui lòng nhập email công ty';
+    return;
+  }
   formError.value = '';
   currentStep.value++;
 };
@@ -358,14 +398,31 @@ const form = ref({
   phone: '',
   date_of_birth: '',
   gender: '',
+  ethnicity: '',
+  religion: '',
+  marital_status: '',
+  nationality_name: '',
+  hometown: '',
+  education_level: '',
   address: '',
+  permanent_address: '',
   department_id: '',
   job_title_id: '',
+  manager_id: '',
   hire_date: '',
+  probation_end_date: '',
   employment_status: 'active',
   employment_type: 'full_time',
+  id_number: '',
+  id_issue_date: '',
+  id_issue_place: '',
+  tax_number: '',
+  insurance_number: '',
   bank_name: '',
-  bank_account: ''
+  bank_account: '',
+  emergency_contact_name: '',
+  emergency_contact_relationship: '',
+  emergency_contact_phone: ''
 });
 
 const columns = [
@@ -405,6 +462,13 @@ const genderOptions = [
   { label: 'Khác', value: 'O' },
 ];
 
+const maritalStatusOptions = [
+  { label: '--', value: '' },
+  { label: 'Độc thân', value: 'SINGLE' },
+  { label: 'Đã kết hôn', value: 'MARRIED' },
+  { label: 'Khác', value: 'OTHER' },
+];
+
 const normalizeEmploymentType = (value) => {
   const mapping = {
     'fulltime': 'full_time',
@@ -417,8 +481,25 @@ const normalizeEmploymentType = (value) => {
   return mapping[value] || value || 'full_time';
 };
 
+const asArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.items)) return value.items;
+  if (Array.isArray(value?.data)) return value.data;
+  return [];
+};
+
 const departmentFilterOptions = computed(() => [
   ...departmentOptions.value
+]);
+
+const managerOptions = computed(() => [
+  { label: '-- Không có --', value: '' },
+  ...employees.value
+    .filter(e => !editingId.value || String(e.id) !== String(editingId.value))
+    .map(e => ({
+      label: `${e.full_name}${e.employee_code ? ` (${e.employee_code})` : ''}`,
+      value: String(e.id)
+    }))
 ]);
 
 const totalEmployees = computed(() => employees.value.length);
@@ -499,14 +580,31 @@ const resetForm = () => {
     phone: '',
     date_of_birth: '',
     gender: '',
+    ethnicity: '',
+    religion: '',
+    marital_status: '',
+    nationality_name: '',
+    hometown: '',
+    education_level: '',
     address: '',
+    permanent_address: '',
     department_id: '',
     job_title_id: '',
+    manager_id: '',
     hire_date: '',
+    probation_end_date: '',
     employment_status: 'active',
     employment_type: 'full_time',
+    id_number: '',
+    id_issue_date: '',
+    id_issue_place: '',
+    tax_number: '',
+    insurance_number: '',
     bank_name: '',
-    bank_account: ''
+    bank_account: '',
+    emergency_contact_name: '',
+    emergency_contact_relationship: '',
+    emergency_contact_phone: ''
   };
   formError.value = '';
 };
@@ -561,14 +659,31 @@ const openEditModal = (employee) => {
     phone: employee.phone || employee.personal_phone || '',
     date_of_birth: employee.date_of_birth || employee.dob || '',
     gender: employee.gender || '',
+    ethnicity: employee.ethnicity || '',
+    religion: employee.religion || '',
+    marital_status: (employee.marital_status || '').toUpperCase(),
+    nationality_name: employee.nationality_name || '',
+    hometown: employee.hometown || '',
+    education_level: employee.education_level || '',
     address: employee.address || '',
+    permanent_address: employee.permanent_address || '',
     department_id: deptId,
     job_title_id: jobId,
+    manager_id: employee.manager_id ? String(employee.manager_id) : '',
     hire_date: employee.hire_date || employee.start_date || '',
+    probation_end_date: (employee.probation_end_date || '').substring(0, 10),
     employment_status: employee.employment_status || 'active',
     employment_type: normalizeEmploymentType(employee.employment_type),
+    id_number: employee.id_number || '',
+    id_issue_date: (employee.id_issue_date || '').substring(0, 10),
+    id_issue_place: employee.id_issue_place || '',
+    tax_number: employee.tax_number || '',
+    insurance_number: employee.insurance_number || '',
     bank_name: employee.bank_name || '',
-    bank_account: employee.bank_account || ''
+    bank_account: employee.bank_account || '',
+    emergency_contact_name: employee.emergency_contact_name || '',
+    emergency_contact_relationship: employee.emergency_contact_relationship || '',
+    emergency_contact_phone: employee.emergency_contact_phone || ''
   };
   
   showModal.value = true;
@@ -601,26 +716,50 @@ const handleSubmit = async () => {
     return;
   }
 
+  if (!form.value.work_email?.trim()) {
+    formError.value = 'Vui lòng nhập email công ty';
+    return;
+  }
+
   try {
     saving.value = true;
     formError.value = '';
     
     const deptIdParsed = form.value.department_id ? parseInt(form.value.department_id, 10) : null;
     const jobIdParsed = form.value.job_title_id ? parseInt(form.value.job_title_id, 10) : null;
+    const managerIdParsed = form.value.manager_id ? parseInt(form.value.manager_id, 10) : null;
     
     const payload = {
       code: form.value.employee_code,
       full_name: form.value.full_name,
+      work_email: form.value.work_email || null,
       gender: form.value.gender || null,
       dob: form.value.date_of_birth || null,
-      personal_email: form.value.personal_email || form.value.work_email || null,
+      personal_email: form.value.personal_email || null,
       personal_phone: form.value.phone || null,
       address: form.value.address || null,
+      ethnicity: form.value.ethnicity || null,
+      religion: form.value.religion || null,
+      marital_status: form.value.marital_status || null,
+      nationality_name: form.value.nationality_name || null,
+      hometown: form.value.hometown || null,
+      education_level: form.value.education_level || null,
+      permanent_address: form.value.permanent_address || null,
+      probation_end_date: form.value.probation_end_date || null,
+      id_number: form.value.id_number || null,
+      id_issue_date: form.value.id_issue_date || null,
+      id_issue_place: form.value.id_issue_place || null,
+      tax_number: form.value.tax_number || null,
+      insurance_number: form.value.insurance_number || null,
       bank_name: form.value.bank_name || null,
       bank_account: form.value.bank_account || null,
+      emergency_contact_name: form.value.emergency_contact_name || null,
+      emergency_contact_relationship: form.value.emergency_contact_relationship || null,
+      emergency_contact_phone: form.value.emergency_contact_phone || null,
       employment: {
         department_id: isNaN(deptIdParsed) ? null : deptIdParsed,
         job_title_id: isNaN(jobIdParsed) ? null : jobIdParsed,
+        manager_id: isNaN(managerIdParsed) ? null : managerIdParsed,
         start_date: form.value.hire_date || new Date().toISOString().split('T')[0],
         employment_status: form.value.employment_status || 'active',
         employment_type: normalizeEmploymentType(form.value.employment_type)
@@ -744,19 +883,21 @@ onMounted(async () => {
       jobTitleService.getAll()
     ]);
     
-    employees.value = employeesRes?.data || employeesRes || [];
+    employees.value = asArray(employeesRes);
     
-    const depts = departmentsRes?.data || departmentsRes || [];
+    const depts = asArray(departmentsRes);
     departmentOptions.value = depts.map(d => ({
-      label: d.name,
+      label: d.name || d.department_name || d.department_code || `Phòng ban #${d.id}`,
       value: String(d.id)
     }));
     
-    const titles = jobTitlesRes?.data || jobTitlesRes || [];
-    jobTitleOptions.value = titles.map(t => ({
-      label: t.name,
-      value: String(t.id)
-    }));
+    const titles = asArray(jobTitlesRes);
+    jobTitleOptions.value = titles
+      .filter(t => t?.id)
+      .map(t => ({
+        label: t.name || t.position_name || t.job_title_name || t.title || t.position_code || `Chức danh #${t.id}`,
+        value: String(t.id)
+      }));
     
   } catch (err) {
     console.error('Employees API Error:', err);

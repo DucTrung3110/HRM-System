@@ -1,5 +1,6 @@
 
 import axiosClient from './axiosClient';
+import { buildEmployeeCreatePayload, normalizeStatusForApi } from './employeePayload';
 
 const mapEmployee = (emp) => {
   if (!emp) return emp;
@@ -89,41 +90,7 @@ export const employeeService = {
   // Create new employee
   // IMPORTANT: Laravel backend requires employment data nested in 'employment' object
   create: async (data) => {
-    // Extract fields that belong to the profile JSONB column
-    const profile = {
-      ...(data.profile || {}),
-      address: data.address || '',
-      personal_phone: data.personal_phone || data.phone || '',
-      bank_name: data.bank_name || '',
-      bank_account: data.bank_account || '',
-      personal_email: data.personal_email || '',
-      id_number: data.id_number || '',
-      id_issue_date: data.id_issue_date || '',
-      id_issue_place: data.id_issue_place || '',
-      tax_number: data.tax_number || '',
-      insurance_number: data.insurance_number || '',
-      emergency_contact_name: data.emergency_contact_name || '',
-      emergency_contact_relationship: data.emergency_contact_relationship || data.relationship || '',
-      emergency_contact_phone: data.emergency_contact_phone || '',
-    };
-
-    // Flatten payload: department_id, position_id (job_title_id), and company_email (work_email) at root
-    const payload = {
-      employee_code: data.employee_code || data.code || '',
-      full_name: data.full_name || '',
-      gender: data.gender || null,
-      date_of_birth: data.date_of_birth || data.dob || null,
-      company_email: data.company_email || data.work_email || (data.employment && (data.employment.company_email || data.employment.work_email)) || '',
-      phone_number: data.phone_number || data.phone || data.personal_phone || '',
-      personal_email: data.personal_email || '',
-      status: typeof (data.status || (data.employment && data.employment.employment_status) || data.employment_status || 'ACTIVE') === 'string'
-        ? (data.status || (data.employment && data.employment.employment_status) || data.employment_status || 'ACTIVE').toUpperCase()
-        : 'ACTIVE',
-      hire_date: data.hire_date || (data.employment && data.employment.start_date) || data.start_date || new Date().toISOString().split('T')[0],
-      department_id: data.department_id || (data.employment && data.employment.department_id) || null,
-      position_id: data.position_id || data.job_title_id || (data.employment && (data.employment.position_id || data.employment.job_title_id)) || null,
-      profile: profile
-    };
+    const payload = buildEmployeeCreatePayload(data);
 
     const response = await axiosClient.post('/employees', payload);
     return response.data;
@@ -218,7 +185,7 @@ export const employeeService = {
       flatPayload.personal_email = data.personal_email;
     }
     if (statusVal !== undefined) {
-      flatPayload.status = typeof statusVal === 'string' ? statusVal.toUpperCase() : statusVal;
+      flatPayload.status = normalizeStatusForApi(statusVal);
     }
     if (hireDate !== undefined) {
       flatPayload.hire_date = hireDate;

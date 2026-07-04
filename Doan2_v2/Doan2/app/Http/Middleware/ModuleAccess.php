@@ -192,6 +192,22 @@ class ModuleAccess
             return false;
         }
 
+        // Phiếu lương chi tiết: GET /salary-details/{id}/payslip không mang
+        // employee_id nên check tổng quát bên dưới sẽ chặn nhầm nhân viên xem
+        // phiếu lương CỦA CHÍNH MÌNH. Phân giải chủ sở hữu từ bản ghi.
+        if ($segment === 'salary-details' && str_contains($path, '/payslip')) {
+            $parts = explode('/', ltrim($path, '/'));
+            $rid = $parts[1] ?? '';
+            if (is_numeric($rid)) {
+                $ownerId = (int) \Illuminate\Support\Facades\DB::table('salary_details')
+                    ->where('id', (int) $rid)->value('employee_id');
+
+                return $ownerId === $employeeId;
+            }
+
+            return false;
+        }
+
         if (! in_array($segment, self::SELF_SERVICE, true)) {
             return false;
         }
