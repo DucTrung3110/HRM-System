@@ -21,8 +21,17 @@ use Illuminate\Support\Facades\DB;
  */
 class StandardizeAttendanceSeeder extends Seeder
 {
-    private const START = '2026-05-01';
-    private const END = '2026-06-26';
+    // Demo: sinh chấm công 6 tháng gần nhất → hôm nay (dữ liệu từ quá khứ đến
+    // hiện tại, không bị cũ theo thời gian). Override bằng env nếu cần cố định.
+    private static function start(): string
+    {
+        return env('HRM_SEED_ATT_START', CarbonImmutable::now()->subMonthsNoOverflow(6)->startOfMonth()->toDateString());
+    }
+
+    private static function end(): string
+    {
+        return env('HRM_SEED_ATT_END', CarbonImmutable::now()->toDateString());
+    }
 
     public function run(): void
     {
@@ -65,11 +74,11 @@ class StandardizeAttendanceSeeder extends Seeder
                 DB::table('attendances')
                     ->where('tenant_id', $tenantId)
                     ->where('employee_id', $emp->id)
-                    ->whereBetween('work_date', [self::START, self::END])
+                    ->whereBetween('work_date', [self::start(), self::end()])
                     ->delete();
 
-                $start = CarbonImmutable::parse(self::START);
-                $end = CarbonImmutable::parse(self::END);
+                $start = CarbonImmutable::parse(self::start());
+                $end = CarbonImmutable::parse(self::end());
                 // Không tạo công trước ngày vào làm.
                 $hire = $emp->hire_date ? CarbonImmutable::parse($emp->hire_date) : null;
 
@@ -175,7 +184,7 @@ class StandardizeAttendanceSeeder extends Seeder
         DB::table('shift_assignments')->insert([
             'employee_id' => $emp->id,
             'shift_type_id' => $hcShiftId,
-            'effective_date' => $emp->hire_date ?: self::START,
+            'effective_date' => $emp->hire_date ?: self::start(),
             'is_permanent' => DB::raw('true'),
             'status' => 'ACTIVE',
             'notes' => 'Gán ca mặc định (chuẩn hoá dữ liệu)',
@@ -221,7 +230,7 @@ class StandardizeAttendanceSeeder extends Seeder
     {
         return DB::table('holidays')
             ->where('tenant_id', $tenantId)
-            ->whereBetween('holiday_date', [self::START, self::END])
+            ->whereBetween('holiday_date', [self::start(), self::end()])
             ->pluck('holiday_date')
             ->map(fn ($d) => CarbonImmutable::parse($d)->toDateString())
             ->unique()->values()->all();
