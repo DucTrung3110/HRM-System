@@ -10,7 +10,7 @@
     <!-- Sidebar -->
     <aside 
       :class="[
-        'fixed left-0 top-0 h-full w-72 bg-sidebar/98 backdrop-blur-xl border-r border-sidebar-border z-50 transition-transform duration-300 shadow-[18px_0_60px_-46px_rgba(15,23,42,0.45)]',
+        'fixed left-0 top-0 h-full w-72 bg-sidebar backdrop-blur-xl border-r border-sidebar-border z-50 transition-transform duration-300 shadow-[18px_0_60px_-46px_rgba(15,23,42,0.45)]',
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full',
         isSidebarCollapsed ? 'lg:-translate-x-full' : 'lg:translate-x-0'
       ]"
