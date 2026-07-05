@@ -90,7 +90,8 @@ class AttendanceSummaryService
         foreach ($employees as $employeeId) {
             $att = $this->attendanceAggregate($employeeId, $start, $end, $tenantId, $legalEntityId);
             $overtimeHours = $this->overtimeHours($employeeId, $start, $end, $tenantId);
-            $leaveDays = $this->leaveDays($employeeId, $start, $end, $tenantId);
+            $leave = $this->leaveDays($employeeId, $start, $end, $tenantId);
+            $leaveDays = $leave['paid'];
 
             $presentDays = $att['on_time_days'] + $att['late_days'] + $att['early_leave_days'];
 
@@ -109,8 +110,8 @@ class AttendanceSummaryService
             $payload = TenantContext::stamp([
                 'standard_days' => $standardDays,
                 'actual_working_days' => $presentDays,
-                'paid_leave_days' => $leaveDays,
-                'unpaid_leave_days' => 0,
+                'paid_leave_days' => $leave['paid'],
+                'unpaid_leave_days' => $leave['unpaid'],
                 'holiday_days' => $holidayDays,
                 'overtime_hours' => $overtimeHours,
                 'late_minutes' => $att['late_minutes'],
@@ -194,27 +195,34 @@ class AttendanceSummaryService
     }
 
     /**
-     * Sum approved leave days overlapping the period.
+     * Approved leave days overlapping the period, SPLIT theo có lương / không lương
+     * (leave_types.category = 'UNPAID' → không lương → prorate trừ lương).
      *
-     * "Overlapping" = the leave window intersects [start, end]. We credit the
-     * full request total_days when it overlaps (good enough for this summary;
-     * day-accurate proration can be layered on later).
+     * Đơn nghỉ VẮT qua 2 tháng: chỉ tính phần ngày RƠI TRONG kỳ (giao của
+     * [start_date,end_date] với kỳ), tránh cộng full total_days vào cả hai kỳ.
+     *
+     * @return array{paid: float, unpaid: float}
+     * ponytail: UNPAID theo category; nghỉ thai sản (BHXH chi trả) vẫn tính 'paid'
+     * ở đây — tách riêng khi cần trừ lương công ty cho ngày thai sản.
      */
-    private function leaveDays(int $employeeId, string $start, string $end, int $tenantId): float
+    private function leaveDays(int $employeeId, string $start, string $end, int $tenantId): array
     {
-        // Đơn nghỉ VẮT qua 2 tháng: chỉ tính phần ngày RƠI TRONG kỳ (clamp theo
-        // giao của [start_date,end_date] với kỳ), tránh cộng full total_days vào
-        // cả hai kỳ (đếm trùng). Cap tại total_days (đơn nửa ngày).
-        return (float) DB::table('leave_requests')
-            ->where('tenant_id', $tenantId)
-            ->where('employee_id', $employeeId)
-            ->whereIn('status', self::APPROVED_STATUSES)
-            ->where('start_date', '<=', $end)
-            ->where('end_date', '>=', $start)
-            ->selectRaw(
-                'COALESCE(SUM(LEAST(total_days, (LEAST(end_date, ?::date) - GREATEST(start_date, ?::date) + 1))), 0) AS d',
-                [$end, $start]
-            )
-            ->value('d');
+        $r = DB::selectOne(
+            "SELECT
+                COALESCE(SUM(CASE WHEN UPPER(lt.category) <> 'UNPAID' THEN d END), 0) AS paid,
+                COALESCE(SUM(CASE WHEN UPPER(lt.category) = 'UNPAID' THEN d END), 0) AS unpaid
+             FROM (
+                SELECT lr.leave_type_id,
+                       LEAST(lr.total_days, (LEAST(lr.end_date, ?::date) - GREATEST(lr.start_date, ?::date) + 1)) AS d
+                FROM leave_requests lr
+                WHERE lr.tenant_id = ? AND lr.employee_id = ?
+                  AND lr.status IN (?, ?) AND lr.start_date <= ?::date AND lr.end_date >= ?::date
+             ) x
+             JOIN leave_types lt ON lt.id = x.leave_type_id",
+            [$end, $start, $tenantId, $employeeId,
+             self::APPROVED_STATUSES[0], self::APPROVED_STATUSES[1], $end, $start]
+        );
+
+        return ['paid' => (float) ($r->paid ?? 0), 'unpaid' => (float) ($r->unpaid ?? 0)];
     }
 }
