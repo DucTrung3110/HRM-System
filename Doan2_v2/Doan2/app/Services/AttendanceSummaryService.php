@@ -93,7 +93,10 @@ class AttendanceSummaryService
             $leave = $this->leaveDays($employeeId, $start, $end, $tenantId);
             $leaveDays = $leave['paid'];
 
-            $presentDays = $att['on_time_days'] + $att['late_days'] + $att['early_leave_days'];
+            // Ngày công = chấm công thật + WFH/công tác ĐÃ DUYỆT (căn cứ đơn, không
+            // ai chấm công khi làm từ xa/đi công tác). ponytail: giả định ngày WFH
+            // không đồng thời có bản ghi chấm công (tránh đếm đôi).
+            $presentDays = $att['on_time_days'] + $att['late_days'] + $att['early_leave_days'] + (int) round($leave['work']);
 
             $meta = [
                 'present_days' => $presentDays,
@@ -209,8 +212,9 @@ class AttendanceSummaryService
     {
         $r = DB::selectOne(
             "SELECT
-                COALESCE(SUM(CASE WHEN UPPER(lt.category) <> 'UNPAID' THEN d END), 0) AS paid,
-                COALESCE(SUM(CASE WHEN UPPER(lt.category) = 'UNPAID' THEN d END), 0) AS unpaid
+                COALESCE(SUM(CASE WHEN UPPER(lt.category) NOT IN ('UNPAID','WORK') THEN d END), 0) AS paid,
+                COALESCE(SUM(CASE WHEN UPPER(lt.category) = 'UNPAID' THEN d END), 0) AS unpaid,
+                COALESCE(SUM(CASE WHEN UPPER(lt.category) = 'WORK' THEN d END), 0) AS work
              FROM (
                 SELECT lr.leave_type_id,
                        LEAST(lr.total_days, (LEAST(lr.end_date, ?::date) - GREATEST(lr.start_date, ?::date) + 1)) AS d
@@ -223,6 +227,11 @@ class AttendanceSummaryService
              self::APPROVED_STATUSES[0], self::APPROVED_STATUSES[1], $end, $start]
         );
 
-        return ['paid' => (float) ($r->paid ?? 0), 'unpaid' => (float) ($r->unpaid ?? 0)];
+        return [
+            'paid' => (float) ($r->paid ?? 0),
+            'unpaid' => (float) ($r->unpaid ?? 0),
+            // WFH / công tác đã duyệt → tính là NGÀY LÀM VIỆC (không phải nghỉ).
+            'work' => (float) ($r->work ?? 0),
+        ];
     }
 }

@@ -87,6 +87,12 @@ class LeavePolicyService
             'BEREAVEMENT' => ['paid' => true, 'accrual' => 'per_event', 'requires_balance' => false,
                 'max_days_per_event' => (int) HrmConfig::get('leave.bereavement_days', 3),
                 'statutory_ref' => 'Điều 115.1.c'],
+            // WFH / công tác: KHÔNG phải nghỉ — tính là ngày làm việc, không trừ
+            // quỹ phép. Duyệt theo đơn (cấp quản lý) rồi tính công.
+            'WFH' => ['paid' => true, 'accrual' => 'none', 'requires_balance' => false,
+                'affects_annual_balance' => false, 'counts_as_work' => true, 'statutory_ref' => 'Nội quy công ty'],
+            'BUSINESS_TRIP' => ['paid' => true, 'accrual' => 'none', 'requires_balance' => false,
+                'affects_annual_balance' => false, 'counts_as_work' => true, 'statutory_ref' => 'Nội quy công ty'],
         ];
 
         $base = $defaults[$code] ?? [
