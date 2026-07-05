@@ -265,13 +265,16 @@ class PayrollRunService
                     ->whereBetween('work_date', [$periodStart, $periodEnd])
                     ->sum('amount');
 
-                // gross floored at 0 — never persist a negative payslip.
-                $gross = round(max(0.0, $proratedBase + $proratedAllowance + $overtimePay + $pieceRatePay - $fixedDeductions), 4);
+                // GROSS = tổng thu nhập TRƯỚC khấu trừ. Khấu trừ cố định (tạm ứng,
+                // đoàn phí…) là khấu trừ SAU THUẾ: trừ vào NET, KHÔNG giảm gross và
+                // KHÔNG giảm thu nhập chịu thuế (chỉ BH + giảm trừ gia cảnh mới
+                // giảm thuế). Trước đây trừ vào gross → gross sai + tính thiếu thuế.
+                $gross = round(max(0.0, $proratedBase + $proratedAllowance + $overtimePay + $pieceRatePay), 4);
                 // Thu nhập chịu thuế: dùng $overtimeTaxable (đã loại phần phụ trội
                 // OT được miễn thuế) thay vì toàn bộ $overtimePay.
                 $grossTaxable = $allowancesTaxable
-                    ? round(max(0.0, $proratedBase + $proratedAllowance + $overtimeTaxable + $pieceRatePay - $fixedDeductions), 4)
-                    : round(max(0.0, $proratedBase + $overtimeTaxable + $pieceRatePay - $fixedDeductions), 4);
+                    ? round(max(0.0, $proratedBase + $proratedAllowance + $overtimeTaxable + $pieceRatePay), 4)
+                    : round(max(0.0, $proratedBase + $overtimeTaxable + $pieceRatePay), 4);
 
                 // Active dependents registered within the period window.
                 // status is mixed-encoded across data ('true','1','ACTIVE',NULL);
@@ -301,7 +304,8 @@ class PayrollRunService
                 $pit = $this->tax->pit($taxableIncome);
 
                 // net floored at 0 — an employee is never paid a negative salary.
-                $net = round(max(0.0, $gross - $empInsurance['total'] - $pit['tax']), 4);
+                // Khấu trừ cố định trừ Ở ĐÂY (sau thuế).
+                $net = round(max(0.0, $gross - $empInsurance['total'] - $pit['tax'] - $fixedDeductions), 4);
 
                 $meta = [
                     'engine' => 'vn-payroll-v1',

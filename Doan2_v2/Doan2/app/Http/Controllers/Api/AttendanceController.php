@@ -911,7 +911,9 @@ class AttendanceController extends Controller
         $shiftIds = array_values($request->input('shift_type_ids'));
         $weeks = (int) $request->input('weeks');
         $rotate = $request->boolean('rotate', true);
-        $startMonday = \Carbon\Carbon::parse($request->input('start_date'))->startOfDay();
+        // Snap về thứ Hai của tuần để các tuần xoay khớp nhau kể cả khi caller
+        // truyền ngày giữa tuần (không tin mỗi FE).
+        $startMonday = \Carbon\Carbon::parse($request->input('start_date'))->startOfWeek(\Carbon\Carbon::MONDAY);
 
         // Nhân viên: theo danh sách hoặc tất cả NV đang làm.
         $employees = DB::table('employees')
