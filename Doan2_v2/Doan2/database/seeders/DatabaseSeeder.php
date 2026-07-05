@@ -24,6 +24,32 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
+        // RBAC access theo role (roles.meta). BẮT BUỘC set — AccessControl fail-OPEN
+        // khi meta thiếu key 'modules' (coi như full admin), nên role không cấu hình
+        // = mọi nhân viên thành admin. Set tường minh để đóng lỗ hổng đó.
+        $roleMeta = [
+            'ADMIN' => ['is_admin' => true],
+            'HR' => ['modules' => ['hr', 'time', 'recruitment', 'communications']],
+            'MANAGER' => ['modules' => ['time']],
+            'ACCOUNTANT' => ['modules' => ['payroll']],
+            'EMPLOYEE' => ['modules' => []],
+        ];
+        foreach ($roleMeta as $code => $meta) {
+            DB::table('roles')->where('role_code', $code)
+                ->update(['meta' => json_encode($meta), 'updated_at' => now()]);
+        }
+
+        // An (NV0001) = tài khoản admin demo → cần role ADMIN (org phẳng nên không
+        // tự có quyền admin sau khi meta được cấu hình đúng).
+        $adminRoleId = DB::table('roles')->where('role_code', 'ADMIN')->value('id');
+        $an = DB::table('employees')->where('company_email', 'an.nguyen@company.com')->value('id');
+        if ($adminRoleId && $an) {
+            DB::table('employee_roles')->updateOrInsert(
+                ['employee_id' => $an, 'role_id' => $adminRoleId],
+                ['is_active' => 'true', 'tenant_id' => 1, 'created_at' => now(), 'updated_at' => now()],
+            );
+        }
+
         DB::table('employees')->updateOrInsert(
             ['company_email' => 'admin@company.com'],
             [
