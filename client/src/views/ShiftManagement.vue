@@ -193,6 +193,13 @@
       <div class="space-y-4">
         <BaseInput v-model="shiftForm.code" label="Mã ca" required />
         <BaseInput v-model="shiftForm.name" label="Tên ca" required />
+        <div>
+          <label class="block text-sm font-medium text-foreground mb-1">Nhãn màu ca (hiển thị trên lịch xếp ca)</label>
+          <div class="flex items-center gap-2">
+            <input v-model="shiftForm.color_code" type="color" class="h-9 w-14 rounded border border-input bg-background cursor-pointer" />
+            <span class="text-sm text-muted-foreground">{{ shiftForm.color_code }}</span>
+          </div>
+        </div>
         <BaseInput v-model="shiftForm.start_time" type="time" label="Giờ bắt đầu" required />
         <BaseInput v-model="shiftForm.end_time" type="time" label="Giờ kết thúc" required />
         <BaseInput v-if="!splitShift" v-model.number="shiftForm.break_minutes" type="number" label="Giờ nghỉ giữa ca (phút)" />
@@ -337,6 +344,7 @@ const emptyShiftForm = () => ({
   end_time: '',
   break_minutes: 30, // chuẩn chung các công ty VN: 30 phút/ca
   break_note: '',
+  color_code: '#3b82f6', // nhãn màu ca — grid xếp ca đã đọc field này
   is_active: true,
 });
 const shiftForm = ref(emptyShiftForm());
