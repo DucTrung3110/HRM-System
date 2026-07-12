@@ -35,6 +35,8 @@ class AuthController extends Controller
 
         $access = AccessControl::forEmployee((int) $employee->id, ! empty($employee->is_super_admin));
 
+        unset($employee->password_hash); // không bao giờ trả hash về client
+
         return response()->json([
             'status' => 200,
             'message' => 'Login successful',

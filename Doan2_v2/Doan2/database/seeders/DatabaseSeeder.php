@@ -76,6 +76,19 @@ class DatabaseSeeder extends Seeder
             ],
         );
 
+        // Demo passwords (nút đăng nhập nhanh ở Login.vue) — bền qua reseed.
+        foreach ([
+            'an.nguyen@company.com' => 'test1234',
+            'cuong.le@company.com' => 'demo1234',
+            'mai.tran@company.com' => 'demo1234',
+            'huong.pham@company.com' => 'demo1234',
+        ] as $email => $pw) {
+            DB::table('employees')->where('company_email', $email)
+                ->update(['password_hash' => Hash::make($pw), 'updated_at' => now()]);
+        }
+
+        $this->call(SeedDepartmentMetaSeeder::class);
+        $this->call(LeaveTypeStatutorySeeder::class);
         $this->call(DashboardDemoSeeder::class);
     }
 }

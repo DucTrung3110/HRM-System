@@ -475,11 +475,11 @@ class ContractController extends Controller
         ];
         $contract->update(['meta' => $meta]);
 
-        return $this->ok([
+        return $this->ok(array_merge([
             'sent' => true,
             'expires_in' => 600,
-            'dev_otp' => $otp, // DEMO: production sẽ gửi qua email/SMS, không trả về đây
-        ], 'Đã gửi mã OTP xác nhận');
+            // DEV only: production (APP_DEBUG=false) gửi OTP qua email/SMS, không trả về response.
+        ], config('app.debug') ? ['dev_otp' => $otp] : []), 'Đã gửi mã OTP xác nhận');
     }
 
     /**

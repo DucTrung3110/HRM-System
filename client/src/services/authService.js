@@ -21,6 +21,14 @@ export const authService = {
     // Default full access chỉ khi server thực sự không gửi access (backward-safe, no lockout).
     const access = response.data?.data?.access || response.data?.access || { full: true, modules: [] };
 
+    if (user) {
+      // Bản ghi login LÀ employee (id = employee_id) nhưng nhiều view đọc
+      // user.employee_id để self-scope API (RBAC 403 nếu thiếu) → gắn alias 1
+      // lần ở đây thay vì fallback rải rác từng view. Không lưu password_hash.
+      user.employee_id = user.employee_id || user.id;
+      delete user.password_hash;
+    }
+
     if (token) {
       localStorage.setItem('auth_token', token);
       localStorage.setItem('user', JSON.stringify(user || {}));
@@ -158,8 +166,10 @@ export const authService = {
   // Get current user data
   getUser: () => {
     try {
-      const user = localStorage.getItem('user');
-      return user ? JSON.parse(user) : null;
+      const raw = localStorage.getItem('user');
+      const user = raw ? JSON.parse(raw) : null;
+      if (user && !user.employee_id && user.id) user.employee_id = user.id; // session cũ chưa có alias
+      return user;
     } catch {
       return null;
     }
