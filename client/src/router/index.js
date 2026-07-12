@@ -307,6 +307,20 @@ const routes = [
     ]
   },
   {
+    // Mobile shell (T8, Grab-style) — self-service cho nhân viên, tái dùng
+    // service/API hiện có; bottom-tab 5 mục.
+    path: '/m',
+    component: () => import('../views/mobile/MobileLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      { path: '', name: 'm-home', component: () => import('../views/mobile/MHome.vue'), meta: { title: 'Trang chủ' } },
+      { path: 'attendance', name: 'm-attendance', component: () => import('../views/mobile/MAttendance.vue'), meta: { title: 'Chấm công' } },
+      { path: 'requests', name: 'm-requests', component: () => import('../views/mobile/MRequests.vue'), meta: { title: 'Đơn từ' } },
+      { path: 'salary', name: 'm-salary', component: () => import('../views/mobile/MSalary.vue'), meta: { title: 'Phiếu lương' } },
+      { path: 'me', name: 'm-me', component: () => import('../views/mobile/MProfile.vue'), meta: { title: 'Tôi' } }
+    ]
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/Login.vue')
@@ -343,6 +357,14 @@ router.beforeEach((to, from, next) => {
     
     if (to.meta.adminOnly && !isAdmin) {
       next('/employee-portal');
+      return;
+    }
+
+    // Màn hình nhỏ → nhân viên vào portal được chuyển sang bản mobile /m
+    // (trừ khi đã chọn "Dùng bản đầy đủ"). Admin giữ desktop shell.
+    if (to.path === '/employee-portal' && !isAdmin && window.innerWidth < 768
+        && !localStorage.getItem('prefer_desktop')) {
+      next('/m');
       return;
     }
 
