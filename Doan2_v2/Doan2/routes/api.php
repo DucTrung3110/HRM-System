@@ -30,9 +30,12 @@ Route::get('/', [GenericResourceController::class, 'root']);
 Route::prefix('v1')->group(function (): void {
     Route::get('/', [GenericResourceController::class, 'root']);
     Route::get('/health', [GenericResourceController::class, 'health']);
-    Route::post('/auth/login', [AuthController::class, 'login']);
-    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
+    // Rate-limit các endpoint xác thực (chống brute-force mật khẩu / dò token).
+    Route::middleware('throttle:10,1')->group(function (): void {
+        Route::post('/auth/login', [AuthController::class, 'login']);
+        Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
+        Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
+    });
 
     // ─── Public Routes ───────────────────────────────────
     Route::get('/public/positions', [GenericResourceController::class, 'index'])->defaults('resource', 'positions');

@@ -52,6 +52,18 @@ class EmployeeController extends Controller
             $emp->status = \App\Support\EmployeeStatus::resolve((int) $emp->id);
         }
 
+        // Danh bạ nhân viên là SHARED_READ (mọi NV xem được để tra tên/liên hệ),
+        // nhưng LƯƠNG + hồ sơ cá nhân (CMND, ngày sinh…) chỉ dành cho vai trò
+        // HR/Payroll. Người xem thường → ẩn các cột nhạy cảm khỏi kết quả list.
+        $access = $request->attributes->get('access');
+        $privileged = is_array($access) && (! empty($access['full'])
+            || array_intersect(['hr', 'payroll'], $access['modules'] ?? []));
+        if (! $privileged) {
+            foreach ($items as $emp) {
+                unset($emp->base_salary, $emp->profile, $emp->personal_email, $emp->date_of_birth);
+            }
+        }
+
         return $this->ok([
             'items' => $items,
             'pagination' => [
@@ -196,7 +208,7 @@ class EmployeeController extends Controller
     /**
      * GET /employees/{id} — Chi tiết nhân viên kèm relations.
      */
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
         $employee = Employee::with([
             'department:id,department_name,department_code',
@@ -210,6 +222,17 @@ class EmployeeController extends Controller
         }
 
         $employee->status = \App\Support\EmployeeStatus::resolve((int) $employee->id);
+
+        // Lương + hợp đồng + hồ sơ cá nhân chỉ cho HR/Payroll hoặc chính chủ.
+        $access = $request->attributes->get('access');
+        $privileged = is_array($access) && (! empty($access['full'])
+            || array_intersect(['hr', 'payroll'], $access['modules'] ?? []));
+        $isSelf = (int) $request->attributes->get('auth_employee_id') === (int) $id;
+        if (! $privileged && ! $isSelf) {
+            unset($employee->base_salary, $employee->personal_email, $employee->date_of_birth);
+            $employee->unsetRelation('activeContract');
+            $employee->setAttribute('profile', null);
+        }
 
         return $this->ok($employee, 'Employee detail');
     }
@@ -301,9 +324,16 @@ class EmployeeController extends Controller
             }
         }
 
-        // Only update columns that exist on the table
+        // Only update columns that exist on the table. BLOCK security/identity
+        // columns from mass-assignment: is_super_admin (platform cross-tenant
+        // operator), tenant_id/legal_entity_id (moving a row between companies) —
+        // otherwise any HR-module user could grant super-admin or leak across
+        // tenants. Those are never set through a normal employee edit.
         $columns = Schema::getColumnListing('employees');
-        $data = collect($request->except(['id', 'created_at', 'updated_at', 'password_hash']))
+        $data = collect($request->except([
+            'id', 'created_at', 'updated_at', 'password_hash',
+            'is_super_admin', 'tenant_id', 'legal_entity_id',
+        ]))
             ->only($columns)
             ->toArray();
 
