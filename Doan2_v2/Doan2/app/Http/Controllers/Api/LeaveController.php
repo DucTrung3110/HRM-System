@@ -171,7 +171,9 @@ class LeaveController extends Controller
         $columns = Schema::getColumnListing('leave_requests');
         $data = collect($request->all())->only($columns)->toArray();
         $data['total_days'] = $totalDays;
-        $data['status'] = $data['status'] ?? 'PENDING';
+        // Đơn tạo mới LUÔN ở PENDING — không cho client tự set APPROVED để bỏ qua
+        // duyệt + né trừ số dư phép (chỉ approve() mới chuyển trạng thái + trừ quota).
+        $data['status'] = 'PENDING';
 
         // Persist classification + reason in meta (payroll reads `paid`; no `reason` column).
         $meta = [];
@@ -231,8 +233,10 @@ class LeaveController extends Controller
             ]);
         }
 
+        // 'status' bị loại: sửa đơn KHÔNG được đổi trạng thái (duyệt/từ chối/hủy
+        // đi qua approve/reject/cancel riêng) — tránh tự duyệt qua PATCH.
         $columns = Schema::getColumnListing('leave_requests');
-        $data = collect($request->except(['id', 'created_at', 'updated_at']))->only($columns)->toArray();
+        $data = collect($request->except(['id', 'created_at', 'updated_at', 'status']))->only($columns)->toArray();
 
         $leave->update($data);
 
