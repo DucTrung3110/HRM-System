@@ -631,7 +631,7 @@ class AttendanceController extends Controller
     public function timesheet(Request $request, TimesheetService $service): JsonResponse
     {
         $month = (string) $request->query('month', now()->format('Y-m'));
-        if (! preg_match('/^\d{4}-\d{2}$/', $month)) {
+        if (! preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
             return $this->validationError(['month' => ['Định dạng tháng phải là YYYY-MM']]);
         }
 
@@ -669,7 +669,7 @@ class AttendanceController extends Controller
         $end = $request->input('end');
         if ($request->filled('month')) {
             $month = (string) $request->input('month');
-            if (! preg_match('/^\d{4}-\d{2}$/', $month)) {
+            if (! preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
                 return $this->validationError(['month' => ['Định dạng tháng phải là YYYY-MM']]);
             }
             $start = \Carbon\Carbon::parse($month . '-01')->startOfMonth()->toDateString();
