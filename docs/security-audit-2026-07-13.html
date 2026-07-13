@@ -161,15 +161,15 @@
   <section>
     <div class="verdict">
       <div class="card verdict-main">
-        <span class="badge-ok">● KHÔNG CÒN LỖ HỔNG CRITICAL/HIGH</span>
+        <span class="badge-ok">● KHÔNG CÒN LỖ HỔNG CRITICAL/HIGH · 0 CRASH</span>
         <h2>Lõi hệ thống đã đủ vững để đưa vào vận hành</h2>
-        <p>6/6 phát hiện đã vá &amp; verify. Phần còn lại là cấu hình hạ tầng khi deploy (HTTPS, CORS, biến môi trường) — không phải lỗi mã nguồn.</p>
+        <p>2 vòng kiểm thử: 6 lỗ bảo mật + 4 điểm crash do input rác — tất cả đã vá &amp; verify. Phần còn lại là cấu hình hạ tầng khi deploy (HTTPS, CORS, biến môi trường) — không phải lỗi mã nguồn.</p>
       </div>
       <div class="counts">
-        <div class="stat"><div class="k">Critical</div><div class="v" style="color:var(--crit)">1</div></div>
-        <div class="stat"><div class="k">High</div><div class="v" style="color:var(--high)">3</div></div>
-        <div class="stat"><div class="k">Medium</div><div class="v" style="color:var(--med)">2</div></div>
-        <div class="stat"><div class="k">Đã vá &amp; verify</div><div class="v" style="color:var(--ok)">6</div></div>
+        <div class="stat"><div class="k">Lỗ bảo mật</div><div class="v" style="color:var(--high)">6</div></div>
+        <div class="stat"><div class="k">Điểm crash (500)</div><div class="v" style="color:var(--crit)">4</div></div>
+        <div class="stat"><div class="k">Endpoint fuzz</div><div class="v">127</div></div>
+        <div class="stat"><div class="k">Đã vá &amp; verify</div><div class="v" style="color:var(--ok)">10</div></div>
       </div>
     </div>
   </section>
@@ -298,9 +298,59 @@
     </div>
   </section>
 
+  <!-- ZERO-TRUST ROUND -->
+  <section>
+    <div class="sec-head"><span class="n">03</span><h2>Vòng 2 — Zero-trust fuzzing: ép hệ thống lộ lỗi khi vận hành</h2></div>
+    <p class="lede" style="margin-bottom:22px">Bắn input rác (sai kiểu, quá dài, ngày vô lý, chuỗi tấn công) vào <b>cả 127 endpoint ghi</b>. Mỗi <code>500</code> = một exception chưa bắt = API sập giữa chừng khi khách hàng dùng thật. Tìm ra 4 điểm — vá tận gốc, không vá triệu chứng.</p>
+
+    <div class="finding crit">
+      <div class="f-top">
+        <span class="chip crit">Crash ×3</span>
+        <span class="f-id">Z1 · Input rác chạm thẳng database</span>
+        <span class="chip done">✓ Đã vá · verify</span>
+      </div>
+      <div class="f-title">Sai kiểu / quá dài → Postgres ném lỗi → API trả 500 kèm cả câu SQL</div>
+      <div class="f-where">bootstrap/app.php · global exception handler</div>
+      <p class="f-body">3 kiểu input làm sập: <code>employee_id="abc"</code> (sai kiểu bigint trên rule <code>exists</code>), tên phòng ban 8000 ký tự (tràn <code>varchar(255)</code>). Lỗi <code>QueryException</code> mặc định thành 500 — vừa sập thao tác, vừa <b>lộ nguyên câu SQL + tên bảng</b> ra response.</p>
+      <div class="ba">
+        <div class="risk"><div class="lbl">Rủi ro</div><p>Một form nhập sai kiểu là sập API; lộ cấu trúc DB cho kẻ tấn công dò.</p></div>
+        <div class="fix"><div class="lbl">Cách vá (1 chỗ, phủ 127 endpoint)</div><p>Handler quy lỗi DB theo SQLSTATE: 22xxx (sai kiểu/quá dài) → 422, 23xxx (trùng/FK) → 409; lỗi server thật vẫn 500 + log. Không còn SQL lọt ra ngoài.</p></div>
+      </div>
+      <div class="proof">3 crasher cũ → <b>422</b> · trùng khoá → <b>409</b> · 20 write rác khác → <b>0 crash</b> · dữ liệu hợp lệ vẫn 200</div>
+    </div>
+
+    <div class="finding high">
+      <div class="f-top">
+        <span class="chip high">Crash ×1</span>
+        <span class="f-id">Z2 · Tháng vô lý làm sập bảng công</span>
+        <span class="chip done">✓ Đã vá · verify</span>
+      </div>
+      <div class="f-title"><code>?month=2026-99</code> lọt qua regex rồi làm Carbon ném lỗi → 500</div>
+      <div class="f-where">AttendanceController · timesheet() + recompute()</div>
+      <p class="f-body">Regex <code>\d{4}-\d{2}</code> chấp nhận tháng 99; sau đó thư viện ngày parse "2026-99" thì nổ. 2 hàm dùng chung mẫu này.</p>
+      <div class="ba">
+        <div class="risk"><div class="lbl">Rủi ro</div><p>Chỉ cần đổi URL tháng là sập trang Bảng công tháng.</p></div>
+        <div class="fix"><div class="lbl">Cách vá</div><p>Siết regex về tháng thật <code>(0[1-9]|1[0-2])</code> ở cả 2 hàm.</p></div>
+      </div>
+      <div class="proof">2026-99 / 2026-00 / 2026-13 → <b>422</b> · 2026-07 → <b>200</b></div>
+    </div>
+
+    <div class="finding med">
+      <div class="f-top">
+        <span class="chip med">Đã kiểm</span>
+        <span class="f-id">Z3 · Ranh giới xác thực</span>
+        <span class="chip done">✓ Vững</span>
+      </div>
+      <div class="f-title">Token giả / sửa / hết hạn / chuỗi SQLi đều bị chặn</div>
+      <div class="f-where">HrmAuth middleware</div>
+      <p class="f-body">Thử mọi kiểu token bất hợp lệ — không cái nào lọt.</p>
+      <div class="proof">không token / rác / sửa đuôi / rỗng / <code>' OR '1'='1</code> / hết hạn → <b>401</b> · token thật → <b>200</b> · SQLi vào token bất khả (hash SHA-256 trước khi truy vấn)</div>
+    </div>
+  </section>
+
   <!-- SOLID + TODO -->
   <section>
-    <div class="sec-head"><span class="n">03</span><h2>Đã kiểm tra kỹ — phần này vững</h2></div>
+    <div class="sec-head"><span class="n">04</span><h2>Đã kiểm tra kỹ — phần này vững</h2></div>
     <div class="grid2">
       <ul class="clean ok">
         <li><span class="mk">✓</span><span><b>Token xác thực:</b> đối xứng opaque, lưu dạng hash SHA-256, có hạn dùng, thu hồi khi đổi mật khẩu.</span></li>
@@ -317,7 +367,7 @@
   </section>
 
   <section>
-    <div class="sec-head"><span class="n">04</span><h2>Cần làm khi deploy — cấu hình hạ tầng, không phải lỗi mã</h2></div>
+    <div class="sec-head"><span class="n">05</span><h2>Cần làm khi deploy — cấu hình hạ tầng, không phải lỗi mã</h2></div>
     <ul class="clean todo">
       <li><span class="mk">▹</span><span><b>APP_DEBUG=false · APP_ENV=production</b> trên VPS — hiện container dev đang bật debug (lộ stack-trace nếu để nguyên).</span></li>
       <li><span class="mk">▹</span><span><b>CORS</b> cho phép origin Vercel &amp; <b>HTTPS</b> cho API trên VPS.</span></li>
@@ -328,7 +378,7 @@
 
   <footer>
     <span>HRM System · Security &amp; Production-Readiness Audit</span>
-    <span>6 phát hiện · 6 đã vá &amp; verify · 13/07/2026</span>
+    <span>2 vòng · 10 phát hiện · 10 đã vá &amp; verify · 127 endpoint fuzz · 13/07/2026</span>
   </footer>
 </div>
 
