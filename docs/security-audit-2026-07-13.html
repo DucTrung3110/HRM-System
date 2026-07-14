@@ -163,13 +163,13 @@
       <div class="card verdict-main">
         <span class="badge-ok">● KHÔNG CÒN LỖ HỔNG CRITICAL/HIGH · 0 CRASH</span>
         <h2>Lõi hệ thống đã đủ vững để đưa vào vận hành</h2>
-        <p>2 vòng kiểm thử: 6 lỗ bảo mật + 4 điểm crash do input rác — tất cả đã vá &amp; verify. Phần còn lại là cấu hình hạ tầng khi deploy (HTTPS, CORS, biến môi trường) — không phải lỗi mã nguồn.</p>
+        <p>3 vòng kiểm thử: 6 lỗ bảo mật + 4 điểm crash input rác + 3 race đồng thời (double-spend quota) — tất cả đã vá &amp; verify. Phần còn lại là cấu hình hạ tầng khi deploy (HTTPS, CORS, biến môi trường) — không phải lỗi mã nguồn.</p>
       </div>
       <div class="counts">
         <div class="stat"><div class="k">Lỗ bảo mật</div><div class="v" style="color:var(--high)">6</div></div>
         <div class="stat"><div class="k">Điểm crash (500)</div><div class="v" style="color:var(--crit)">4</div></div>
-        <div class="stat"><div class="k">Endpoint fuzz</div><div class="v">127</div></div>
-        <div class="stat"><div class="k">Đã vá &amp; verify</div><div class="v" style="color:var(--ok)">10</div></div>
+        <div class="stat"><div class="k">Race đồng thời</div><div class="v" style="color:var(--high)">3</div></div>
+        <div class="stat"><div class="k">Đã vá &amp; verify</div><div class="v" style="color:var(--ok)">13</div></div>
       </div>
     </div>
   </section>
@@ -348,9 +348,63 @@
     </div>
   </section>
 
+  <!-- CONCURRENCY ROUND -->
+  <section>
+    <div class="sec-head"><span class="n">04</span><h2>Vòng 3 — Đồng thời: bắn nhiều request cùng lúc để lộ race</h2></div>
+    <p class="lede" style="margin-bottom:22px">Một quản lý bấm duyệt hai lần, hay hai người duyệt cùng lúc — hệ thống có trừ quota <b>hai lần</b> không? Đây là loại lỗi không bao giờ thấy khi test tay, chỉ lộ khi bắn request song song thật.</p>
+
+    <div class="finding crit">
+      <div class="f-top">
+        <span class="chip crit">Double-spend</span>
+        <span class="f-id">C1 · Duyệt phép đồng thời trừ quota nhiều lần</span>
+        <span class="chip done">✓ Đã vá · verify</span>
+      </div>
+      <div class="f-title">8 lượt duyệt song song 1 đơn 2 ngày → trừ <b>6 ngày</b> phép (3×)</div>
+      <div class="f-where">LeaveController · approve() + adjustBalanceAndLedger()</div>
+      <p class="f-body">Đơn được kiểm "đang chờ duyệt" <b>ngoài</b> transaction, rồi mới trừ quota <b>trong</b> transaction — không khoá hàng. Nhiều request cùng lọt qua bước kiểm → cùng trừ. Đây là lỗi tiền/quota kinh điển (TOCTOU).</p>
+      <div class="ba">
+        <div class="risk"><div class="lbl">Rủi ro</div><p>Nhân viên nghỉ 2 ngày nhưng quota trừ 6; hoặc trừ hụt khi 2 đơn duyệt song song (mất cập nhật).</p></div>
+        <div class="fix"><div class="lbl">Cách vá</div><p><code>lockForUpdate</code> khoá hàng đơn + xác nhận lại trạng thái TRONG transaction; khoá thêm hàng số dư để read-modify-write không mất cập nhật.</p></div>
+      </div>
+      <div class="proof">Sau vá: 8 duyệt song song → <b>1×200 + 7×422</b>, quota 14 → <b>12</b> (đúng 2 ngày), giao dịch trừ = <b>1</b></div>
+    </div>
+
+    <div class="finding high">
+      <div class="f-top">
+        <span class="chip high">Double-credit</span>
+        <span class="f-id">C2 · Duyệt tăng ca đồng thời cộng nghỉ bù nhiều lần</span>
+        <span class="chip done">✓ Đã vá · verify</span>
+      </div>
+      <div class="f-title">Duyệt OT quy đổi nghỉ bù song song → cộng nghỉ bù 2 lần</div>
+      <div class="f-where">AttendanceController · approveOvertime()</div>
+      <p class="f-body">Cùng lỗi race ở nhánh comp-off: <code>creditCompOff</code> cộng ngày nghỉ bù cho nhân viên — chạy song song thì cộng dư.</p>
+      <div class="ba">
+        <div class="risk"><div class="lbl">Rủi ro</div><p>Nhân viên nhận gấp đôi ngày nghỉ bù.</p></div>
+        <div class="fix"><div class="lbl">Cách vá</div><p>Cùng khoá hàng + xác nhận lại trạng thái trong transaction.</p></div>
+      </div>
+      <div class="proof">Sau vá: 6 duyệt song song → nghỉ bù cộng <b>đúng 0.25 ngày</b>, giao dịch = <b>1</b></div>
+    </div>
+
+    <div class="finding med">
+      <div class="f-top">
+        <span class="chip med">Rác dữ liệu</span>
+        <span class="f-id">C3 · Cấp phép năm nhận năm vô lý</span>
+        <span class="chip done">✓ Đã vá · verify</span>
+      </div>
+      <div class="f-title"><code>accrual/run</code> nhận <code>year="abc"</code>/<code>-5</code> → tạo hàng số dư năm 0 &amp; -5</div>
+      <div class="f-where">LeaveController · accrualRun()</div>
+      <p class="f-body">Ép kiểu <code>(int)"abc"</code>=0 sinh 42 hàng số dư năm bịa cho toàn bộ nhân viên.</p>
+      <div class="ba">
+        <div class="risk"><div class="lbl">Rủi ro</div><p>Bảng số dư phép rác, sai báo cáo phép năm.</p></div>
+        <div class="fix"><div class="lbl">Cách vá</div><p>Chặn năm ngoài khoảng 2000–2100 → 422. Đã dọn 42 hàng rác.</p></div>
+      </div>
+      <div class="proof">year=abc / -5 / 1900 → <b>422</b> · 2026 → 200 · 0 hàng năm rác</div>
+    </div>
+  </section>
+
   <!-- SOLID + TODO -->
   <section>
-    <div class="sec-head"><span class="n">04</span><h2>Đã kiểm tra kỹ — phần này vững</h2></div>
+    <div class="sec-head"><span class="n">05</span><h2>Đã kiểm tra kỹ — phần này vững</h2></div>
     <div class="grid2">
       <ul class="clean ok">
         <li><span class="mk">✓</span><span><b>Token xác thực:</b> đối xứng opaque, lưu dạng hash SHA-256, có hạn dùng, thu hồi khi đổi mật khẩu.</span></li>
@@ -367,7 +421,7 @@
   </section>
 
   <section>
-    <div class="sec-head"><span class="n">05</span><h2>Cần làm khi deploy — cấu hình hạ tầng, không phải lỗi mã</h2></div>
+    <div class="sec-head"><span class="n">06</span><h2>Cần làm khi deploy — cấu hình hạ tầng, không phải lỗi mã</h2></div>
     <ul class="clean todo">
       <li><span class="mk">▹</span><span><b>APP_DEBUG=false · APP_ENV=production</b> trên VPS — hiện container dev đang bật debug (lộ stack-trace nếu để nguyên).</span></li>
       <li><span class="mk">▹</span><span><b>CORS</b> cho phép origin Vercel &amp; <b>HTTPS</b> cho API trên VPS.</span></li>
@@ -378,7 +432,7 @@
 
   <footer>
     <span>HRM System · Security &amp; Production-Readiness Audit</span>
-    <span>2 vòng · 10 phát hiện · 10 đã vá &amp; verify · 127 endpoint fuzz · 13/07/2026</span>
+    <span>3 vòng · 13 phát hiện · 13 đã vá &amp; verify · 127 endpoint fuzz · 13/07/2026</span>
   </footer>
 </div>
 
