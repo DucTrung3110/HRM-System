@@ -477,6 +477,12 @@ class AttendanceController extends Controller
         $message = 'Đơn tăng ca đã được duyệt';
 
         DB::transaction(function () use ($ot, $compOff, $meta, &$message) {
+            // Chống double-credit: khoá hàng + xác nhận lại PENDING trong transaction.
+            // 2 duyệt song song với comp_off=true nếu không khoá sẽ cộng nghỉ bù 2 lần.
+            $locked = DB::table('overtime_requests')->where('id', $ot->id)->lockForUpdate()->first();
+            if (! $locked || ! in_array((string) $locked->status, ['PENDING', 'CHỜ_DUYỆT'], true)) {
+                return;
+            }
             if ($compOff && (bool) HrmConfig::get('overtime.comp_off_enabled', true)) {
                 $ot->update(['status' => 'APPROVED', 'meta' => $meta]);
                 $days = $this->creditCompOff($ot);

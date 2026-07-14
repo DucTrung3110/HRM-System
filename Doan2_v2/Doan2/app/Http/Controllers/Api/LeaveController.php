@@ -303,6 +303,15 @@ class LeaveController extends Controller
         }
 
         DB::transaction(function () use ($leave, $approverId, $meta) {
+            // Chống double-spend (TOCTOU): khoá hàng đơn + xác nhận lại PENDING BÊN
+            // TRONG transaction. Hai request duyệt đồng thời sẽ nối tiếp nhau qua
+            // lockForUpdate; request thứ 2 thấy đã APPROVED → thoát, không trừ quota
+            // lần nữa. (Đã kiểm chứng: trước fix, 3 duyệt song song trừ 3× số ngày.)
+            $locked = DB::table('leave_requests')->where('id', $leave->id)->lockForUpdate()->first();
+            if (! $locked || ! in_array((string) $locked->status, ['PENDING', 'CHỜ_DUYỆT'], true)) {
+                return;
+            }
+
             $meta['approved_by'] = $approverId;
             $meta['approved_at'] = now()->toIso8601String();
 
@@ -549,6 +558,9 @@ class LeaveController extends Controller
     public function accrualRun(Request $request): JsonResponse
     {
         $year = (int) ($request->input('year') ?: now()->year);
+        if ($year < 2000 || $year > 2100) {
+            return $this->validationError(['year' => ['Năm không hợp lệ (2000–2100)']]);
+        }
 
         $summary = $this->leavePolicy->recomputeBalances(TenantContext::id(), $year);
 
@@ -595,9 +607,12 @@ class LeaveController extends Controller
 
         // Resolve the EXACT request-year balance row — no cross-year fallback, so
         // a deduction/refund can never land on a different year's balance.
+        // lockForUpdate: khoá hàng số dư trong suốt transaction để read-modify-write
+        // không bị mất cập nhật khi 2 đơn KHÁC nhau của cùng NV được duyệt song song.
         $balance = LeaveBalance::where('employee_id', $leave->employee_id)
             ->where('leave_type_id', $leave->leave_type_id)
             ->where('year', $year)
+            ->lockForUpdate()
             ->first();
 
         $before = $balance ? (float) $balance->remaining_days : 0.0;
