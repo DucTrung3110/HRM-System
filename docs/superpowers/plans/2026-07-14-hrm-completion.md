@@ -20,6 +20,34 @@
 
 ---
 
+## Audit nghiệp vụ VN — ma trận hoàn thiện (đã kiểm chứng bằng thực tế)
+
+Chấm theo nhu cầu HR+Payroll của doanh nghiệp VN thật, xác minh bằng API/DB/browser — không đoán.
+
+| Nghiệp vụ VN cốt lõi | Trạng thái | Bằng chứng |
+|---|---|---|
+| Bảng lương (thác nước gross→BH→giảm trừ→PIT→net) | ✅ ĐỦ | 620 phiếu, verify số học |
+| PIT lũy tiến 5 bậc (Luật 109/2025) | ✅ ĐỦ | engine PayrollTaxService |
+| BHXH/BHYT/BHTN (trần + SÀN vùng) | ✅ ĐỦ | InsuranceService |
+| Giảm trừ gia cảnh + người phụ thuộc | ✅ ĐỦ | 15.5tr + 6.2tr/người |
+| **Báo cáo BHXH (kê khai)** | ✅ ĐỦ | `reports/generate` type=bhxh-declaration trả rows+totals |
+| **Quyết toán thuế TNCN cuối năm** | ✅ ĐỦ | type=pit-finalization CHẠY (plan cũ ghi thiếu — SAI) |
+| Chấm công + đi muộn/về sớm + máy chấm công | ✅ ĐỦ | 14.720 bản ghi + API device-punch |
+| OT theo luật (150/200/300% + đêm +30%) | ✅ ĐỦ | TimePolicy, verify |
+| Phép năm + thâm niên + nghỉ luật + nghỉ lễ (âm lịch Tết) | ✅ ĐỦ | LeavePolicyService + VietnameseLunarConverter |
+| Hợp đồng + mẫu + ký điện tử OTP | ✅ ĐỦ | ContractController + e-sign |
+| Tuyển dụng + phỏng vấn + đánh giá ứng viên | ✅ ĐỦ (ít data) | có bảng, cần seed |
+| Onboarding / Offboarding | ✅ ĐỦ | OnboardingService |
+| Báo cáo nhân sự (headcount/lương/phép/công) | ✅ ĐỦ | 4 report chạy thật |
+| RBAC + đa-tenant + bảo mật | ✅ ĐỦ | 3 vòng zero-trust, 13 lỗ đã vá |
+| **Lương tháng 13 / thưởng Tết** | ❌ THIẾU | payroll_adjustments có bảng nhưng engine chưa đọc |
+| **Tạm ứng lương** | ❌ THIẾU | không có cơ chế (có thể qua payroll_adjustments âm) |
+| Đánh giá hiệu suất/KPI nhân viên | ⏸️ KHÔNG CÓ | YAGNI — phase 2 (nhiều SME VN chưa dùng trong phần mềm) |
+| Đào tạo (training) | ⏸️ KHÔNG CÓ | YAGNI — phase 2 |
+| Gửi email/OTP thật | ❌ THIẾU | tạo record nhưng chưa gửi |
+
+**Kết luận trung thực:** lõi HR+Payroll+Tuân-thủ-pháp-lý VN đã **~85–90% đủ để chào doanh nghiệp thật**. Khoảng trống PHẢI đóng hẹp: dữ liệu demo, org chart, **thưởng/lương tháng 13**, email. KPI/Đào tạo là **phase 2 — cố tình hoãn (ponytail/YAGNI)**, không build đầu cơ vì nhiều DN VN chưa cần trong phần mềm HR ở giai đoạn này; thêm khi có khách yêu cầu thật.
+
 ## Bức tranh lớn — thứ tự ưu tiên
 
 | # | Gói việc | Vì sao | Rủi ro | Ưu tiên |
@@ -210,7 +238,7 @@ public function test_bonus_adjustment_increases_gross_and_taxable(): void
 git commit -am "feat(payroll): thuong/luong thang 13 cong vao gross+taxable (payroll_adjustments), chiu thue TNCN"
 ```
 
-> ponytail: dùng `payroll_adjustments` sẵn có thay vì bảng mới. UI nhập thưởng là tùy chọn — nếu chưa cần, nhập qua API/seed. Bỏ qua quyết toán thuế TNCN cuối năm (P3.2) — chỉ làm khi khách yêu cầu, khấu trừ tháng đã đúng.
+> ponytail: dùng `payroll_adjustments` sẵn có thay vì bảng mới. UI nhập thưởng là tùy chọn — nếu chưa cần, nhập qua API/seed. **Quyết toán thuế TNCN cuối năm ĐÃ CÓ** (`reports/generate` type=pit-finalization, đã kiểm chạy thật) — không cần làm lại. **Tạm ứng lương**: nếu khách cần, tái dùng `payroll_adjustments` với khoản âm type='ADVANCE' (trừ vào net), cùng cơ chế Task 3 — thêm khi có yêu cầu thật, đừng build đầu cơ.
 
 ---
 
@@ -303,6 +331,7 @@ git commit -am "refactor: xoa tang async attendance chet + 4 pinia store khong d
 - ✅ Không gửi được email/OTP → Task 4
 - ✅ Deploy (CORS/HTTPS/APP_DEBUG) → Task 5
 - ✅ Dead code 1.200 dòng → Task 6
-- Ngoài phạm vi (ghi rõ, không âm thầm bỏ): quyết toán thuế TNCN cuối năm, tích hợp máy chấm công phần cứng thật (API device-punch đã có), thanh toán/ngân hàng thật.
+- Đã CÓ sẵn (không cần làm): quyết toán thuế TNCN cuối năm + kê khai BHXH (2 report chạy thật), máy chấm công (API device-punch).
+- Hoãn có chủ đích (YAGNI, phase 2): đánh giá KPI/hiệu suất, đào tạo, tạm ứng lương (tái dùng payroll_adjustments khi cần), tích hợp ngân hàng thật.
 
 **Thứ tự đề xuất chạy:** Task 1 → 2 (giá trị cao, rủi ro thấp, thấy ngay khi demo) → 3 → 4 → 6 → 5 (khi có VPS).
