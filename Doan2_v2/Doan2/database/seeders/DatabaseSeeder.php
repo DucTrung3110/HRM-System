@@ -93,7 +93,9 @@ class DatabaseSeeder extends Seeder
         $this->call(DemoCoverageSeeder::class);
         $this->call(DashboardDemoSeeder::class);
         $this->call(ScaleWorkerSeeder::class);
+        $this->call(EnrichWorkerProfilesSeeder::class);
         $this->call(StandardizeAttendanceSeeder::class);
+        $this->call(LiveTodayAttendanceSeeder::class);
         $this->call(SeedDemoOvertimeSeeder::class);
         $this->call(BackfillEmployeeProfilesSeeder::class);
         $this->call(FixDemoDataConsistencySeeder::class);

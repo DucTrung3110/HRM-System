@@ -15,27 +15,36 @@ use Illuminate\Support\Facades\DB;
  *  1) Đánh dấu tài khoản kỹ thuật (System Administrator) là `meta.system_account`
  *     → KHÔNG chấm công, loại khỏi bảng công/thống kê.
  *  2) Bảo đảm MỌI nhân viên thật ACTIVE có 1 ca làm việc hiệu lực (mặc định HC).
- *  3) Tạo lại dữ liệu chấm công sạch trong [START..END]: mỗi ngày công (loại CN +
+ *  3) Bù dữ liệu chấm công còn thiếu trong [START..END]: mỗi ngày công (loại CN +
  *     lễ) có giờ vào/ra thực tế quanh ca, phân bố hợp lý ON_TIME/LATE/EARLY_LEAVE/
- *     ABSENT; mọi dòng GẮN ca + phân loại qua TimePolicy (đồng nhất với engine).
+ *     ABSENT; không ghi đè bản ghi đã có.
  */
 class StandardizeAttendanceSeeder extends Seeder
 {
-    // Demo: sinh chấm công 6 tháng gần nhất → hôm nay (dữ liệu từ quá khứ đến
-    // hiện tại, không bị cũ theo thời gian). Override bằng env nếu cần cố định.
+    // Dữ liệu legacy bắt đầu từ 01/03/2024; bù liên tục từ mốc đó đến hôm nay.
+    // Có thể override bằng env cho tenant/demo khác.
     private static function start(): string
     {
-        return env('HRM_SEED_ATT_START', CarbonImmutable::now()->subMonthsNoOverflow(6)->startOfMonth()->toDateString());
+        return env('HRM_SEED_ATT_START', '2024-03-01');
     }
 
     private static function end(): string
     {
-        return env('HRM_SEED_ATT_END', CarbonImmutable::now()->toDateString());
+        // Đổ tới HÔM QUA, chừa hôm nay cho chấm công "live" (nút check-in còn mới +
+        // dashboard "có mặt hôm nay" tăng dần theo thực tế). Tránh biểu đồ 30 ngày
+        // rớt về 0 ở mép phải khi seed cũ hơn ngày chạy.
+        return env('HRM_SEED_ATT_END', CarbonImmutable::yesterday()->toDateString());
     }
 
     public function run(): void
     {
         mt_srand(20260627); // tái lập được
+
+        $this->syncLegacyDates();
+        DB::table('attendances')
+            ->whereBetween('work_date', [self::start(), self::end()])
+            ->where('meta->source', 'dashboard-demo')
+            ->delete();
 
         $tenantIds = DB::table('tenants')->pluck('id')->all();
 
@@ -70,12 +79,13 @@ class StandardizeAttendanceSeeder extends Seeder
                 $shiftId = $this->ensureShiftAssignment($tenantId, $emp, $hcShiftId);
                 $shift = $shifts[$shiftId] ?? null;
 
-                // Xoá dữ liệu chấm công cũ trong khoảng để tạo lại sạch.
-                DB::table('attendances')
+                $existingDates = DB::table('attendances')
                     ->where('tenant_id', $tenantId)
                     ->where('employee_id', $emp->id)
                     ->whereBetween('work_date', [self::start(), self::end()])
-                    ->delete();
+                    ->pluck('work_date')
+                    ->mapWithKeys(fn ($date) => [CarbonImmutable::parse($date)->toDateString() => true])
+                    ->all();
 
                 $start = CarbonImmutable::parse(self::start());
                 $end = CarbonImmutable::parse(self::end());
@@ -90,6 +100,9 @@ class StandardizeAttendanceSeeder extends Seeder
                     if ($hire && $d->lt($hire->startOfDay())) {
                         continue;
                     }
+                    if (isset($existingDates[$d->toDateString()])) {
+                        continue;
+                    }
 
                     $rows[] = $this->makeRow($tenantId, $emp, $shiftId, $shift, $d->toDateString(), $created, $absent, $late, $early);
                 }
@@ -100,6 +113,22 @@ class StandardizeAttendanceSeeder extends Seeder
             }
 
             $this->command?->info("Tenant {$tenantId}: tạo {$created} bản ghi công ({$late} trễ, {$early} về sớm, {$absent} vắng) cho {$real->count()} NV.");
+        }
+    }
+
+    /** Khôi phục ngày chấm công legacy đang nằm trong meta JSON. */
+    private function syncLegacyDates(): void
+    {
+        $rows = DB::table('attendances')->whereNull('work_date')->whereNotNull('meta')->get(['id', 'meta']);
+
+        foreach ($rows as $row) {
+            $date = $this->decode($row->meta)['attendance_date'] ?? null;
+            if (is_string($date) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                DB::table('attendances')->where('id', $row->id)->update([
+                    'work_date' => $date,
+                    'updated_at' => now(),
+                ]);
+            }
         }
     }
 
