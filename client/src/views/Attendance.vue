@@ -1000,13 +1000,17 @@ const loadData = async () => {
     if (filters.value.startDate) params.from = filters.value.startDate;
     if (filters.value.endDate) params.to = filters.value.endDate;
     if (filters.value.employee_id) params.employee_id = filters.value.employee_id;
+    if (filters.value.status) params.status = filters.value.status;
+    // Ngoài lăng kính toàn công ty → CHỈ lấy chấm công của chính mình. NV thường gọi
+    // theo khoảng ngày mà không kèm employee_id sẽ bị 403 (RBAC) → lịch trống.
+    if (!orgLens.value && myEmployeeId.value) params.employee_id = myEmployeeId.value;
 
     try {
       const [attendanceData, employeesData] = await Promise.all([
         attendanceService.getRecords(params),
         // per_page cao — mặc định API chỉ trả trang 1 (15/21 NV) làm thiếu
         // người trong dropdown lọc và map tên.
-        employeeService.getAll({ per_page: 200 })
+        employeeService.getLookup()
       ]);
 
       // API returns array directly

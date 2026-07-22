@@ -84,7 +84,8 @@
 
           <template #actions="{ item }">
             <div class="flex items-center gap-2">
-              <template v-if="isAdmin && item.status === 'pending'">
+              <!-- can_approve do backend tính theo người duyệt của bước hiện tại (fail-closed nếu thiếu). -->
+              <template v-if="item.can_approve">
                 <button
                   @click="approveRequest(item)"
                   class="p-1.5 rounded hover:bg-green-100 dark:hover:bg-green-900 text-green-600 dark:text-green-400"
@@ -436,7 +437,7 @@ const handleCreate = async () => {
 };
 
 const approveRequest = async (request) => {
-  if (processing.value || !isAdmin.value) return;
+  if (processing.value || !request.can_approve) return;
 
   try {
     processing.value = true;
@@ -451,7 +452,7 @@ const approveRequest = async (request) => {
 };
 
 const rejectRequest = async (request) => {
-  if (processing.value || !isAdmin.value) return;
+  if (processing.value || !request.can_approve) return;
 
   try {
     processing.value = true;
@@ -489,6 +490,16 @@ const cancelRequest = async (request) => {
   }
 };
 
+// API trả trạng thái tiếng Việt (CHỜ_DUYỆT…), toàn bộ logic dưới so khớp chuỗi EN
+// (pending/approved…). Chuẩn hoá về EN 1 chỗ để đếm, badge, nút Duyệt/Từ chối và
+// timeline hoạt động đồng nhất. Fallback lowercase nếu API đã trả EN.
+const STATUS_VN_TO_EN = {
+  'CHỜ_DUYỆT': 'pending', 'ĐANG_XỬ_LÝ': 'pending',
+  'ĐÃ_DUYỆT': 'approved', 'HOÀN_THÀNH': 'approved',
+  'TỪ_CHỐI': 'rejected', 'ĐÃ_HỦY': 'cancelled', 'NHÁP': 'draft',
+};
+const normalizeStatus = (s) => STATUS_VN_TO_EN[s] || (s ? String(s).toLowerCase() : s);
+
 const loadRequests = async () => {
   try {
     const params = {};
@@ -499,7 +510,8 @@ const loadRequests = async () => {
       }
     }
     const response = await requestService.getAll(params);
-    requests.value = response?.data || response || [];
+    const list = response?.data || response || [];
+    requests.value = (Array.isArray(list) ? list : []).map(r => ({ ...r, status: normalizeStatus(r.status) }));
   } catch (err) {
     console.error('Error loading requests:', err);
     if (err.response?.status === 403) {

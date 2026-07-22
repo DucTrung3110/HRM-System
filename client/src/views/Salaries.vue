@@ -10,10 +10,10 @@
       </div>
       <div v-if="isAdmin && details.length" class="flex flex-wrap gap-2 items-center">
         <button
-          @click="bulkExportExcel"
+          @click="bulkExportCsv"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-medium hover:bg-green-100 transition-colors"
         >
-          Excel (Cả kỳ)
+          CSV (Cả kỳ)
         </button>
         <button
           @click="bulkExportPDF"
@@ -46,7 +46,7 @@
             @click="runPayroll"
             data-testid="button-run-payroll"
           >
-            <span v-if="runLoading">Đang tính…</span>
+            <span v-if="runLoading">{{ runProgress || 'Đang tính…' }}</span>
             <span v-else>⚡ Tính lương kỳ này</span>
           </BaseButton>
           <BaseButton
@@ -272,7 +272,7 @@
         </details>
       </div>
       <template #footer>
-        <BaseButton variant="outline" @click="exportPayslipExcel" :disabled="!payslip">Xuất Excel</BaseButton>
+        <BaseButton variant="outline" @click="exportPayslipCsv" :disabled="!payslip">Xuất CSV</BaseButton>
         <BaseButton variant="outline" @click="exportPayslipPDF" :disabled="!payslip">In / PDF</BaseButton>
         <BaseButton variant="ghost" @click="payslipOpen = false">Đóng</BaseButton>
       </template>
@@ -291,7 +291,7 @@ import BaseSkeleton from '../components/BaseSkeleton.vue';
 import { salaryService } from '../services/salaryService';
 import { authService } from '../services/authService';
 import { useNotificationStore } from '../stores/notificationStore';
-import * as XLSX from 'xlsx';
+import { downloadCsv } from '../utils/csv';
 
 const notificationStore = useNotificationStore();
 const isAdmin = computed(() => authService.isAdmin());
@@ -306,6 +306,7 @@ const details = ref([]);        // salary_details của kỳ đang chọn (meta 
 const history = ref([]);        // NV: chi tiết lương của mình qua các kỳ
 const loading = ref(false);
 const runLoading = ref(false);
+const runProgress = ref('');
 
 const payslipOpen = ref(false);
 const payslipLoading = ref(false);
@@ -317,13 +318,18 @@ const LOCKED_STATUSES = ['CLOSED', 'LOCKED', 'PAID', 'ĐÃ_ĐÓNG', 'DA_DONG', '
 const selectedPeriod = computed(() => periods.value.find(p => String(p.id) === String(selectedPeriodId.value)) || null);
 const periodLocked = computed(() => selectedPeriod.value && LOCKED_STATUSES.includes(String(selectedPeriod.value.status)));
 
-const periodOptions = computed(() => [
-  { label: 'Chọn kỳ lương', value: '' },
-  ...periods.value.map(p => ({
-    label: `${p.period_code} — ${periodStatusVN(p.status)}`,
-    value: String(p.id),
-  })),
-]);
+const periodOptions = computed(() => {
+  // Đa pháp nhân: cùng mã kỳ lặp theo pháp nhân → chỉ thêm tên pháp nhân khi có nhiều pháp nhân.
+  const multiEntity = new Set(periods.value.map(p => p.legal_entity_id)).size > 1;
+  return [
+    { label: 'Chọn kỳ lương', value: '' },
+    ...periods.value.map(p => ({
+      label: `${p.period_code} — ${periodStatusVN(p.status)}`
+        + (multiEntity && p.legal_entity_name ? ` · ${p.legal_entity_name}` : ''),
+      value: String(p.id),
+    })),
+  ];
+});
 
 const stats = computed(() => {
   const rows = isAdmin.value ? details.value : (myDetail.value ? [myDetail.value] : []);
@@ -440,18 +446,49 @@ const loadHistory = async () => {
 // ── Actions ──
 const runPayroll = async () => {
   if (!selectedPeriodId.value || periodLocked.value) return;
+  const periodId = Number(selectedPeriodId.value);
   runLoading.value = true;
+  runProgress.value = 'Đang đưa vào hàng đợi…';
   try {
-    const res = await salaryService.runPayroll(Number(selectedPeriodId.value));
-    const processed = res?.employees_processed ?? res?.data?.employees_processed;
-    notificationStore.addSuccess(`Đã tính lương cho ${processed ?? '?'} nhân viên`);
-    await loadDetails();
+    // Tính lương chạy NỀN (queue): API trả về ngay (PROCESSING), rồi poll đến khi
+    // xong — tránh timeout khi số nhân viên lớn (công ty sản xuất).
+    const res = await salaryService.runPayroll(periodId);
+    const d = res?.data || res || {};
+    let final = d;
+    if ((d.run_status || 'PROCESSING') === 'PROCESSING') {
+      final = await pollPayrollStatus(periodId, d.total);
+    }
+    if (final.run_status === 'FAILED') {
+      notificationStore.addError('Tính lương thất bại: ' + (final.error || 'lỗi không xác định'));
+    } else {
+      notificationStore.addSuccess(`Đã tính lương cho ${final.processed ?? d.processed ?? '?'} nhân viên`);
+      await loadDetails();
+    }
   } catch (err) {
-    const msg = err.response?.data?.message || 'Không thể tính lương';
-    notificationStore.addError(msg);
+    notificationStore.addError(err.response?.data?.message || 'Không thể tính lương');
   } finally {
     runLoading.value = false;
+    runProgress.value = '';
   }
+};
+
+// Poll trạng thái tính lương nền mỗi 2.5s, tối đa 6 phút.
+const pollPayrollStatus = async (periodId, total) => {
+  const started = Date.now();
+  while (Date.now() - started < 6 * 60 * 1000) {
+    await new Promise((r) => setTimeout(r, 2500));
+    let d;
+    try {
+      const st = await salaryService.runStatus(periodId);
+      d = st?.data || st || {};
+    } catch {
+      continue; // lỗi mạng tạm thời → thử lại
+    }
+    // Backend báo PROCESSING (chưa đếm dần) → hiện thông báo chờ, không show "0/N" gây hiểu nhầm đứng máy.
+    runProgress.value = `Đang tính lương nền cho ${d.total ?? total ?? ''} nhân viên…`;
+    if (d.run_status === 'DONE' || d.run_status === 'FAILED') return d;
+  }
+  return { run_status: 'FAILED', error: 'Quá thời gian chờ tính lương' };
 };
 
 const closePeriod = async () => {
@@ -487,7 +524,7 @@ const openPayslip = async (detail) => {
 const sanitizeFilename = (str) =>
   String(str).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s.-]/g, '_').trim();
 
-const exportPayslipExcel = () => {
+const exportPayslipCsv = () => {
   if (!payslip.value) return;
   const d = payslip.value.salary_detail;
   const name = d?.employee?.full_name || 'NV';
@@ -507,14 +544,8 @@ const exportPayslipExcel = () => {
     ['Giảm trừ gia cảnh', '', Number(payslipMeta.value.personal_relief || 0)],
     ['THỰC LĨNH (NET)', '', Number(d?.net_salary || 0)],
   ];
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{ wch: 38 }, { wch: 14 }, { wch: 20 }];
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }];
-  Object.keys(ws).forEach(k => { if (!k.startsWith('!') && typeof ws[k].v === 'number') ws[k].z = '#,##0'; });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'PhieuLuong');
-  XLSX.writeFile(wb, `PhieuLuong_${sanitizeFilename(name)}_${d?.period?.period_code || ''}.xlsx`);
-  notificationStore.addSuccess('Đã xuất Excel phiếu lương');
+  downloadCsv(data, `PhieuLuong_${sanitizeFilename(name)}_${d?.period?.period_code || ''}.csv`);
+  notificationStore.addSuccess('Đã xuất CSV phiếu lương');
 };
 
 const payslipHTML = (d, rowsE, rowsD, meta, att) => {
@@ -591,7 +622,7 @@ const exportPayslipPDF = () => {
 };
 
 // Bảng lương cả kỳ — MỘT nguồn dữ liệu (salary_details), không gọi N+1 API
-const bulkExportExcel = () => {
+const bulkExportCsv = () => {
   if (!details.value.length) return;
   const data = [
     ['BẢNG LƯƠNG TỔNG HỢP — KỲ ' + (selectedPeriod.value?.period_code || '')],
@@ -611,13 +642,7 @@ const bulkExportExcel = () => {
     [],
     ['', '', 'TỔNG CỘNG', stats.value.gross, -stats.value.deductions, stats.value.net, '', ''],
   ];
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 26 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 10 }];
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
-  Object.keys(ws).forEach(k => { if (!k.startsWith('!') && typeof ws[k].v === 'number') ws[k].z = '#,##0'; });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'BangLuong');
-  XLSX.writeFile(wb, `BangLuong_${selectedPeriod.value?.period_code || 'ky'}.xlsx`);
+  downloadCsv(data, `BangLuong_${selectedPeriod.value?.period_code || 'ky'}.csv`);
   notificationStore.addSuccess('Đã xuất bảng lương cả kỳ');
 };
 

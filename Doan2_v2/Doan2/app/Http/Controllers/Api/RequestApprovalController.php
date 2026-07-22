@@ -28,8 +28,20 @@ class RequestApprovalController extends Controller
 
         $page = $query->paginate($perPage);
 
+        // can_approve cho từng yêu cầu: FE chỉ hiện nút Duyệt/Từ chối cho ĐÚNG người
+        // duyệt bước hiện tại (backend vẫn chặn 403 nếu sai). ponytail: N+1 nhỏ (list ≤100,
+        // không phải hot path); gom query nếu về sau danh sách duyệt phình to.
+        $approverId = $request->attributes->get('auth_employee_id');
+        $items = $page->items();
+        foreach ($items as $item) {
+            $pending = in_array($item->status, ['CHỜ_DUYỆT', 'ĐANG_XỬ_LÝ', 'pending'], true);
+            $notSelf = $approverId !== null && (int) $item->requester_id !== (int) $approverId;
+            $item->can_approve = $pending && $notSelf
+                && $this->approverHoldsStepRole($item->current_step_id, $approverId);
+        }
+
         return $this->ok([
-            'items' => $page->items(),
+            'items' => $items,
             'pagination' => [
                 'current_page' => $page->currentPage(),
                 'per_page' => $page->perPage(),
@@ -228,6 +240,16 @@ class RequestApprovalController extends Controller
             return $this->validationError([
                 'approver_id' => ['Người tạo yêu cầu không thể tự từ chối yêu cầu của mình'],
             ]);
+        }
+
+        // Từ chối là hành động đặc quyền lên bước duyệt — phải giữ đúng role của bước,
+        // giống approve() (trước đây thiếu → bất kỳ ai không phải người tạo cũng từ chối được).
+        if (! $this->approverHoldsStepRole($approvalRequest->current_step_id, $approverId)) {
+            return response()->json([
+                'status' => 403,
+                'message' => 'Bạn không có quyền từ chối bước này',
+                'data' => null,
+            ], 403);
         }
 
         DB::transaction(function () use ($approvalRequest, $request, $approverId) {

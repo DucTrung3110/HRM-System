@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\LegalEntity;
 use App\Models\SalaryDetail;
 use App\Models\SalaryPeriod;
+use App\Services\PayrollRunService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,8 +29,16 @@ class PayrollController extends Controller
 
         $page = $query->paginate($perPage);
 
+        // Đa pháp nhân: cùng period_code lặp lại theo từng pháp nhân → đính tên để
+        // dropdown FE phân biệt (P-2026-07 · Chi nhánh Hà Nội). Bulk pluck, không cần relation.
+        $items = $page->items();
+        $entityNames = \Illuminate\Support\Facades\DB::table('legal_entities')->pluck('name', 'id');
+        foreach ($items as $item) {
+            $item->legal_entity_name = $entityNames[$item->legal_entity_id] ?? null;
+        }
+
         return $this->ok([
-            'items' => $page->items(),
+            'items' => $items,
             'pagination' => [
                 'current_page' => $page->currentPage(),
                 'per_page' => $page->perPage(),
@@ -196,8 +205,9 @@ class PayrollController extends Controller
         $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
 
         $query = SalaryDetail::with([
-            'employee:id,full_name,employee_code',
-            'period:id,period_code,status',
+            'employee:id,full_name,employee_code,department_id',
+            'employee.department:id,department_name',
+            'period:id,period_code,status,end_date',
         ])->orderByDesc('id');
 
         foreach (['employee_id', 'period_id', 'transfer_status'] as $field) {
@@ -225,8 +235,11 @@ class PayrollController extends Controller
     public function payslip(int $id): JsonResponse
     {
         $detail = SalaryDetail::with([
-            'employee:id,full_name,employee_code',
-            'period:id,period_code',
+            'employee:id,full_name,employee_code,company_email,department_id,position_id,legal_entity_id,profile',
+            'employee.department:id,department_code,department_name',
+            'employee.position:id,position_code,position_name',
+            'contract:id,contract_number,contract_type_id,start_date,end_date,status,meta',
+            'period:id,period_code,period_name,period_type,start_date,end_date,status,legal_entity_id',
         ])->find($id);
 
         if (! $detail) {
@@ -235,6 +248,9 @@ class PayrollController extends Controller
 
         $data = [
             'salary_detail' => $detail,
+            'legal_entity' => LegalEntity::query()
+                ->select(['id', 'name', 'code', 'tax_code', 'address', 'status', 'meta'])
+                ->find($detail->legal_entity_id),
             'breakdowns' => DB::table('salary_breakdowns')
                 ->where('salary_detail_id', $id)
                 ->orderBy('item_type')
@@ -363,7 +379,7 @@ class PayrollController extends Controller
      *
      * Refuses (409) when the period is closed/locked. Idempotent for open periods.
      */
-    public function run(Request $request, \App\Services\PayrollRunService $service): JsonResponse
+    public function run(Request $request, PayrollRunService $service): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'salary_period_id' => 'required|integer|exists:salary_periods,id',
@@ -375,24 +391,74 @@ class PayrollController extends Controller
             return $this->validationError($validator->errors()->toArray());
         }
 
-        try {
-            $result = $service->run((int) $request->input('salary_period_id'));
-        } catch (\RuntimeException $e) {
-            if ($e->getCode() === 404) {
-                return $this->notFound('Không tìm thấy kỳ lương');
-            }
-            if ($e->getCode() === 409) {
-                return response()->json([
-                    'status' => 409,
-                    'message' => $e->getMessage(),
-                    'data' => null,
-                ], 409);
-            }
-
-            throw $e;
+        $periodId = (int) $request->input('salary_period_id');
+        $period = DB::table('salary_periods')->where('id', $periodId)->first();
+        if (! $period) {
+            return $this->notFound('Không tìm thấy kỳ lương');
         }
 
-        return $this->ok($result, 'Đã tính lương cho kỳ');
+        // Pre-check kỳ khóa → 409 NGAY (khỏi đưa vào hàng đợi).
+        $locked = ['CLOSED', 'LOCKED', 'PAID', 'ĐÃ_ĐÓNG', 'DA_DONG', 'ĐÃ_TRẢ', 'DA_TRA'];
+        if (in_array((string) $period->status, $locked, true)) {
+            return response()->json([
+                'status' => 409,
+                'message' => 'Kỳ lương đã khóa (' . $period->status . ') — không thể tính lại',
+                'data' => null,
+            ], 409);
+        }
+
+        // Đang chạy dở → không dispatch chồng.
+        $existing = \Illuminate\Support\Facades\Cache::get(\App\Jobs\RunPayrollJob::statusKey($periodId));
+        if (($existing['status'] ?? null) === 'PROCESSING') {
+            return response()->json([
+                'status' => 202,
+                'message' => 'Kỳ này đang được tính, vui lòng chờ',
+                'data' => array_merge(['period_id' => $periodId, 'run_status' => 'PROCESSING'], $existing),
+            ], 202);
+        }
+
+        // Số NV để hiển thị tiến độ.
+        $total = (int) DB::table('employees')
+            ->where('tenant_id', $period->tenant_id)
+            ->whereIn('status', ['ACTIVE', 'PROBATION'])
+            ->count();
+
+        \Illuminate\Support\Facades\Cache::put(\App\Jobs\RunPayrollJob::statusKey($periodId), [
+            'status' => 'PROCESSING',
+            'total' => $total,
+            'started_at' => now()->toIso8601String(),
+        ], now()->addHours(6));
+
+        // Chạy NỀN: trả về ngay, worker xử lý tính lương phía sau (không timeout).
+        \App\Jobs\RunPayrollJob::dispatch(
+            $periodId,
+            (int) $period->tenant_id,
+            $period->legal_entity_id !== null ? (int) $period->legal_entity_id : null,
+        );
+
+        return response()->json([
+            'status' => 202,
+            'message' => 'Đã đưa vào hàng đợi tính lương — đang xử lý nền',
+            'data' => ['period_id' => $periodId, 'total' => $total, 'run_status' => 'PROCESSING'],
+        ], 202);
+    }
+
+    /**
+     * GET /payroll/run-status?salary_period_id= — FE poll tiến độ tính lương nền.
+     */
+    public function runStatus(Request $request): JsonResponse
+    {
+        $periodId = (int) ($request->query('salary_period_id') ?: $request->query('period_id'));
+        if (! $periodId) {
+            return $this->validationError(['salary_period_id' => ['Thiếu mã kỳ lương']]);
+        }
+
+        $status = \Illuminate\Support\Facades\Cache::get(\App\Jobs\RunPayrollJob::statusKey($periodId));
+        if (! $status) {
+            return $this->ok(['period_id' => $periodId, 'run_status' => 'IDLE'], 'Chưa có lần chạy nào');
+        }
+
+        return $this->ok(array_merge(['period_id' => $periodId, 'run_status' => $status['status']], $status), 'Trạng thái tính lương');
     }
 
     private function ok(mixed $data, string $message): JsonResponse
@@ -423,4 +489,3 @@ class PayrollController extends Controller
         ], 422);
     }
 }
-

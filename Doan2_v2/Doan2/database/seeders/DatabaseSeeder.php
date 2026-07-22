@@ -71,6 +71,7 @@ class DatabaseSeeder extends Seeder
             ['employee_id' => $employeeId, 'role_id' => $roleId],
             [
                 'is_active' => 'true',
+                'tenant_id' => 1,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
@@ -89,6 +90,36 @@ class DatabaseSeeder extends Seeder
 
         $this->call(SeedDepartmentMetaSeeder::class);
         $this->call(LeaveTypeStatutorySeeder::class);
+        $this->call(DemoCoverageSeeder::class);
         $this->call(DashboardDemoSeeder::class);
+        $this->call(ScaleWorkerSeeder::class);
+        $this->call(StandardizeAttendanceSeeder::class);
+        $this->call(SeedDemoOvertimeSeeder::class);
+        $this->call(BackfillEmployeeProfilesSeeder::class);
+        $this->call(FixDemoDataConsistencySeeder::class);
+        $this->call(BackfillEmployeeBaseSalarySeeder::class);
+        $this->call(StandardizePayrollSeeder::class);
+
+        // Tài khoản demo KẾ TOÁN (role ACCOUNTANT → chỉ module payroll). phuc.trinh
+        // (NV0013) do DemoCoverageSeeder tạo nên gán ở đây, sau khi seeder đã chạy.
+        $accountantRoleId = DB::table('roles')->where('role_code', 'ACCOUNTANT')->value('id');
+        $phuc = DB::table('employees')->where('company_email', 'phuc.trinh@company.com')->value('id');
+        if ($accountantRoleId && $phuc) {
+            DB::table('employee_roles')->updateOrInsert(
+                ['employee_id' => $phuc, 'role_id' => $accountantRoleId],
+                ['is_active' => 'true', 'tenant_id' => 1, 'created_at' => now(), 'updated_at' => now()],
+            );
+            DB::table('employees')->where('id', $phuc)
+                ->update(['password_hash' => Hash::make('ketoan1234'), 'updated_at' => now()]);
+        }
+
+        // Cấp/đối soát số dư phép năm HIỆN TẠI cho mọi nhân viên của từng tenant.
+        // BẮT BUỘC: thiếu balance năm N thì nhân viên KHÔNG xin nghỉ phép năm được
+        // (LeaveController::store chặn "chưa có số dư phép cho năm N") → hỏng luồng
+        // self-service ngay ngày đầu deploy. Đây là dữ liệu, không phải cấu hình.
+        $leavePolicy = app(\App\Services\LeavePolicyService::class);
+        foreach (DB::table('tenants')->pluck('id') as $tenantId) {
+            $leavePolicy->recomputeBalances((int) $tenantId, (int) now()->year);
+        }
     }
 }

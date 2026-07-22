@@ -34,8 +34,25 @@ class LeaveController extends Controller
 
         $page = $query->paginate($perPage);
 
+        // can_approve theo CẤP duyệt hiện tại của từng đơn (đa cấp: Quản lý→HR…). FE chỉ
+        // hiện nút Duyệt/Từ chối cho đúng người duyệt cấp này (backend vẫn chặn nếu sai).
+        // ponytail: cannotApprove() có truy vấn role — N+1 nhỏ (list ≤100, không hot path).
+        $approverId = $request->attributes->get('auth_employee_id');
+        $items = $page->items();
+        foreach ($items as $item) {
+            $pending = in_array($item->status, ['PENDING', 'CHỜ_DUYỆT'], true);
+            $notSelf = $approverId !== null && (int) $item->employee_id !== (int) $approverId;
+            if ($pending && $notSelf) {
+                $meta = is_string($item->meta) ? (json_decode($item->meta, true) ?: []) : (array) ($item->meta ?? []);
+                $meta = ApprovalFlow::ensure($meta, 'leave');
+                $item->can_approve = ApprovalFlow::cannotApprove($meta, $approverId) === null;
+            } else {
+                $item->can_approve = false;
+            }
+        }
+
         return $this->ok([
-            'items' => $page->items(),
+            'items' => $items,
             'pagination' => [
                 'current_page' => $page->currentPage(),
                 'per_page' => $page->perPage(),
@@ -455,6 +472,22 @@ class LeaveController extends Controller
 
         if (! in_array($leave->status, ['PENDING', 'CHỜ_DUYỆT'])) {
             return $this->validationError(['status' => ['Đơn không ở trạng thái chờ duyệt']]);
+        }
+
+        $approverId = $request->attributes->get('auth_employee_id');
+
+        // Người tạo đơn không tự từ chối (muốn bỏ thì dùng Hủy đơn).
+        if ($approverId !== null && (int) $leave->employee_id === (int) $approverId) {
+            return $this->validationError(['approver_id' => ['Người tạo đơn không thể tự từ chối đơn của mình']]);
+        }
+
+        // Từ chối cũng là quyết định của CẤP duyệt hiện tại → phải giữ đúng vai trò cấp này,
+        // giống approve(). Trước đây reject KHÔNG kiểm tra gì → bất kỳ ai chạm endpoint cũng
+        // từ chối được đơn của người khác, bỏ qua toàn bộ duyệt đa cấp.
+        $rmeta = is_string($leave->meta) ? (json_decode($leave->meta, true) ?: []) : (array) ($leave->meta ?? []);
+        $rmeta = ApprovalFlow::ensure($rmeta, 'leave');
+        if ($err = ApprovalFlow::cannotApprove($rmeta, $approverId)) {
+            return $this->validationError(['approver_id' => [$err]]);
         }
 
         // rejection_reason has no column — preserve it (and the approver) in meta.

@@ -1,6 +1,9 @@
 
 import axiosClient from './axiosClient';
 import { buildEmployeeCreatePayload, normalizeStatusForApi } from './employeePayload';
+import { createEmployeeLookupCache } from './employeeLookupCache';
+
+const lookupCache = createEmployeeLookupCache();
 
 const mapEmployee = (emp) => {
   if (!emp) return emp;
@@ -67,9 +70,24 @@ const mapEmployee = (emp) => {
 };
 
 export const employeeService = {
+  getPage: async (params = {}) => {
+    const response = await axiosClient.get('/employees', { params: { per_page: 50, ...params } });
+    return {
+      items: Array.isArray(response.data) ? response.data.map(mapEmployee) : [],
+      pagination: response.pagination || null
+    };
+  },
+
+  getLookup: async (force = false) => {
+    return lookupCache.get(async () => {
+      const response = await axiosClient.get('/employees/lookup');
+      return Array.isArray(response.data) ? response.data.map(mapEmployee) : [];
+    }, force);
+  },
+
   // Get all employees
-  getAll: async (params) => {
-    const response = await axiosClient.get('/employees', { params });
+  getAll: async (params = {}) => {
+    const response = await axiosClient.get('/employees', { params: { ...params, per_page: 2000 } });
     const data = response.data || [];
     return Array.isArray(data) ? data.map(mapEmployee) : data;
   },
@@ -93,29 +111,14 @@ export const employeeService = {
     const payload = buildEmployeeCreatePayload(data);
 
     const response = await axiosClient.post('/employees', payload);
+    lookupCache.invalidate();
     return response.data;
   },
 
   // Update employee
   update: async (id, data) => {
-    // 1. Fetch current employee to retrieve their existing profile and prevent overwrites
-    let currentEmployee = {};
-    try {
-      const response = await axiosClient.get(`/employees/${id}`);
-      currentEmployee = response.data || {};
-    } catch (e) {
-      console.warn('Failed to fetch current employee for profile merge', e);
-    }
-    
-    const existingProfileObj = typeof currentEmployee.profile === 'string'
-      ? JSON.parse(currentEmployee.profile || '{}')
-      : (currentEmployee.profile || {});
-
-    // 2. Extract and merge profile fields
-    const profile = {
-      ...existingProfileObj,
-      ...(data.profile || {})
-    };
+    // Backend merges this partial object atomically with the stored JSON profile.
+    const profile = { ...(data.profile || {}) };
     
     const profileKeys = [
       'address', 'personal_phone', 'bank_name', 'bank_account', 'personal_email',
@@ -145,7 +148,7 @@ export const employeeService = {
       }
     });
 
-    // 3. Extract and map flat properties
+    // Extract and map flat properties
     let deptId = data.department_id;
     let posId = data.position_id || data.job_title_id;
     let compEmail = data.company_email || data.work_email;
@@ -210,6 +213,7 @@ export const employeeService = {
     flatPayload.profile = profile;
 
     const response = await axiosClient.patch(`/employees/${id}`, flatPayload);
+    lookupCache.invalidate();
     return response.data;
   },
 
@@ -226,12 +230,7 @@ export const employeeService = {
     const response = await axiosClient.patch(`/employees/${id}`, {
       manager_id: managerId === '' || managerId === null || managerId === undefined ? null : Number(managerId),
     });
-    return response.data;
-  },
-
-  // Delete employee
-  delete: async (id) => {
-    const response = await axiosClient.delete(`/employees/${id}`);
+    lookupCache.invalidate();
     return response.data;
   },
 
@@ -239,6 +238,7 @@ export const employeeService = {
   // mark them TERMINATED (safe — no hard delete). Used by the org chart.
   detachFromOrg: async (id) => {
     const response = await axiosClient.post(`/employees/${id}/detach-from-org`);
+    lookupCache.invalidate();
     return response.data;
   },
 
@@ -271,6 +271,12 @@ export const employeeService = {
   // Get employee salaries
   getSalaries: async (employeeId) => {
     const response = await axiosClient.get(`/salary-details`, { params: { employee_id: employeeId } });
+    return response.data;
+  },
+
+  // Phiếu lương chi tiết 1 kỳ: { salary_detail, breakdowns, attendance_summary }
+  getPayslip: async (detailId) => {
+    const response = await axiosClient.get(`/salary-details/${detailId}/payslip`);
     return response.data;
   },
 
