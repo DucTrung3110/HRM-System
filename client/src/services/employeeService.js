@@ -280,6 +280,12 @@ export const employeeService = {
     return response.data;
   },
 
+  // Import hàng loạt từ CSV (FE đã parse thành mảng object).
+  import: async (rows) => {
+    const response = await axiosClient.post('/employees/import', { rows });
+    return response.data;
+  },
+
   // Create employee salary
   createSalary: async (employeeId, data) => {
     const payload = { ...data, employee_id: employeeId };

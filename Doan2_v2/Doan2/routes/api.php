@@ -157,6 +157,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/employees/lookup', [EmployeeController::class, 'lookup']);
         Route::get('/employees', [EmployeeController::class, 'index']);
         Route::post('/employees', [EmployeeController::class, 'store']);
+        Route::post('/employees/import', [EmployeeController::class, 'import']);
         Route::get('/employees/{id}', [EmployeeController::class, 'show'])->whereNumber('id');
         Route::put('/employees/{id}', [EmployeeController::class, 'update'])->whereNumber('id');
         Route::patch('/employees/{id}', [EmployeeController::class, 'update'])->whereNumber('id');
