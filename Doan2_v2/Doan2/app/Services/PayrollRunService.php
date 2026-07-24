@@ -125,18 +125,45 @@ class PayrollRunService
                     continue;
                 }
 
-                // Taxable allowances (active, effective in period).
-                $allowanceTotal = (float) DB::table('employee_allowances')
-                    ->where('tenant_id', $tenantId)
-                    ->where('employee_id', $employeeId)
-                    ->where('is_active', DB::raw('true'))
+                // Phụ cấp trong kỳ, kèm CỜ từ catalog `allowances` (nghiệp vụ thật —
+                // đối chiếu phiếu lương nhà máy ADMS/Aureole, khớp TT10/2020 + Đ.89):
+                //  - is_insurable: tính vào NỀN BHXH (kỹ năng/thâm niên/chức vụ CÓ;
+                //    chuyên cần/đi lại/ăn ca KHÔNG).
+                //  - is_taxable: tính vào thu nhập chịu thuế (ăn ca miễn tới trần TT111).
+                //  - meta->in_ot_base: tính vào ĐƠN GIÁ giờ tăng ca (ADMS: kỹ năng + đi lại).
+                $allowanceRows = DB::table('employee_allowances as ea')
+                    ->leftJoin('allowances as a', 'a.id', '=', 'ea.allowance_id')
+                    ->where('ea.tenant_id', $tenantId)
+                    ->where('ea.employee_id', $employeeId)
+                    ->where('ea.is_active', DB::raw('true'))
                     ->where(function ($q) use ($periodEnd) {
-                        $q->whereNull('effective_date')->orWhere('effective_date', '<=', $periodEnd);
+                        $q->whereNull('ea.effective_date')->orWhere('ea.effective_date', '<=', $periodEnd);
                     })
                     ->where(function ($q) use ($periodStart) {
-                        $q->whereNull('expiry_date')->orWhere('expiry_date', '>=', $periodStart);
+                        $q->whereNull('ea.expiry_date')->orWhere('ea.expiry_date', '>=', $periodStart);
                     })
-                    ->sum('amount');
+                    ->get(['ea.amount', 'a.is_insurable', 'a.is_taxable', 'a.meta as allowance_meta']);
+
+                $allowanceTotal = 0.0;
+                $insurableAllowance = 0.0;   // vào nền BHXH
+                $taxableAllowance = 0.0;     // vào thu nhập chịu thuế
+                $otBaseAllowance = 0.0;      // vào đơn giá giờ OT
+                foreach ($allowanceRows as $ar) {
+                    $amt = (float) $ar->amount;
+                    $allowanceTotal += $amt;
+                    // Không join được catalog (allowance_id null) → coi như taxable,
+                    // không insurable (giữ hành vi cũ, không âm thầm tăng tiền đóng BH).
+                    if (filter_var($ar->is_insurable ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                        $insurableAllowance += $amt;
+                    }
+                    if (filter_var($ar->is_taxable ?? true, FILTER_VALIDATE_BOOLEAN)) {
+                        $taxableAllowance += $amt;
+                    }
+                    $aMeta = is_string($ar->allowance_meta) ? (json_decode($ar->allowance_meta, true) ?: []) : (array) ($ar->allowance_meta ?? []);
+                    if (! empty($aMeta['in_ot_base'])) {
+                        $otBaseAllowance += $amt;
+                    }
+                }
 
                 // Fixed-amount deductions only. Percentage-based employee_deductions
                 // are the legacy encoding of statutory insurance (8/1.5/1) which we
@@ -248,7 +275,9 @@ class PayrollRunService
                         : 26.0;
                     $hoursPerDay = (float) HrmConfig::get('payroll.standard_hours_per_day', 8);
                     $monthlyHours = max(1.0, $stdDaysForRate * $hoursPerDay);
-                    $hourlyRate = $baseSalary / $monthlyHours;
+                    // Đơn giá OT = (LCB + phụ cấp gắn cờ in_ot_base) / giờ chuẩn —
+                    // khớp phiếu ADMS: (6.949.000+300.000+180.000)/26/8 × 1.5 × 24h.
+                    $hourlyRate = ($baseSalary + $otBaseAllowance) / $monthlyHours;
                     // Hệ số đã nằm trong weightedOtHours nên không nhân lại.
                     $overtimePay = round($weightedOtHours * $hourlyRate, 4);
                     // Miễn thuế TNCN phần trả CAO HƠN đơn giá giờ thường của tiền
@@ -288,8 +317,12 @@ class PayrollRunService
                 $gross = round(max(0.0, $proratedBase + $proratedAllowance + $overtimePay + $pieceRatePay + $bonusTotal), 4);
                 // Thu nhập chịu thuế: dùng $overtimeTaxable (đã loại phần phụ trội
                 // OT được miễn thuế) thay vì toàn bộ $overtimePay. Thưởng cộng đủ (chịu thuế).
+                // Thu nhập chịu thuế dùng phụ cấp GẮN CỜ is_taxable (ăn ca miễn thuế
+                // theo TT111); config allowances_taxable_by_default chỉ còn là fallback
+                // khi tắt hẳn (false → bỏ toàn bộ phụ cấp khỏi thuế như cũ).
+                $proratedTaxableAllowance = round($taxableAllowance * $prorationFactor, 4);
                 $grossTaxable = $allowancesTaxable
-                    ? round(max(0.0, $proratedBase + $proratedAllowance + $overtimeTaxable + $pieceRatePay + $bonusTotal), 4)
+                    ? round(max(0.0, $proratedBase + $proratedTaxableAllowance + $overtimeTaxable + $pieceRatePay + $bonusTotal), 4)
                     : round(max(0.0, $proratedBase + $overtimeTaxable + $pieceRatePay + $bonusTotal), 4);
 
                 // Active dependents registered within the period window.
@@ -312,8 +345,12 @@ class PayrollRunService
                     ->count();
 
                 // Insurance is contributed on the base salary (capped in service).
-                $empInsurance = $this->insurance->employee($baseSalary);
-                $employerInsurance = $this->insurance->employer($baseSalary);
+                // Nền BHXH = LCB + phụ cấp is_insurable (Đ.89 Luật BHXH + TT10/2020:
+                // khoản bổ sung ổn định tính chất lương phải đóng; chuyên cần/đi lại/
+                // ăn ca được loại). Khớp phiếu ADMS: (6.949.000+400.000) × 8% = 587.920.
+                $insuranceBase = $baseSalary + $insurableAllowance;
+                $empInsurance = $this->insurance->employee($insuranceBase);
+                $employerInsurance = $this->insurance->employer($insuranceBase);
 
                 $relief = $this->tax->personalRelief($dependentCount);
                 $taxableIncome = max(0.0, round($grossTaxable - $empInsurance['total'] - $relief, 4));
@@ -333,6 +370,10 @@ class PayrollRunService
                     'proration_absent_days' => $absentDays,
                     'allowance_total' => $allowanceTotal,
                     'prorated_allowance' => $proratedAllowance,
+                    'insurable_allowance' => $insurableAllowance,
+                    'insurance_base' => $insuranceBase,
+                    'taxable_allowance' => $taxableAllowance,
+                    'ot_base_allowance' => $otBaseAllowance,
                     'overtime_hours' => $overtimeHours,
                     'overtime_weighted_hours' => $weightedOtHours,
                     'overtime_pay' => $overtimePay,

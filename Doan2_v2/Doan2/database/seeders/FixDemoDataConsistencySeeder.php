@@ -158,6 +158,29 @@ class FixDemoDataConsistencySeeder extends Seeder
         }
 
         $this->command?->info("Đã chuẩn hoá nội dung {$updated} bản tin/chính sách demo.");
+
+        // 6) Catalog phụ cấp kiểu nhà máy (đối chiếu phiếu lương thật ADMS/Aureole):
+        // cờ is_insurable theo TT10/2020 (kỹ năng/thâm niên/chức vụ đóng BH; chuyên
+        // cần/đi lại/ăn ca không), meta.in_ot_base = tính vào đơn giá giờ tăng ca.
+        $catalog = [
+            ['PC-KN', 'Phụ cấp kỹ năng', true, true, true],
+            ['PC-CC', 'Phụ cấp chuyên cần', true, false, false],
+            ['PC-NO', 'Phụ cấp nhà ở', true, false, false],
+            ['PC-NC', 'Phụ cấp nuôi con nhỏ', true, false, false],
+        ];
+        foreach ($catalog as [$code, $name, $taxable, $insurable, $otBase]) {
+            DB::table('allowances')->updateOrInsert(
+                ['tenant_id' => 1, 'allowance_code' => $code],
+                ['allowance_name' => $name, 'allowance_type' => 'FIXED', 'calculation_method' => 'MONTHLY',
+                    'is_taxable' => DB::raw($taxable ? 'true' : 'false'),
+                    'is_insurable' => DB::raw($insurable ? 'true' : 'false'),
+                    'status' => 'true', 'meta' => json_encode(['in_ot_base' => $otBase]),
+                    'updated_at' => now(), 'created_at' => now()],
+            );
+        }
+        // Đi lại (PC-XM) tính vào đơn giá OT như ADMS.
+        DB::table('allowances')->where('tenant_id', 1)->where('allowance_code', 'PC-XM')
+            ->update(['meta' => json_encode(['in_ot_base' => true]), 'updated_at' => now()]);
     }
 
     /**
