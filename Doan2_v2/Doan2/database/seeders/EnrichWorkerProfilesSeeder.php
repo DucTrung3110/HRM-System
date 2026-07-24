@@ -120,6 +120,115 @@ class EnrichWorkerProfilesSeeder extends Seeder
         }
 
         $this->command?->info("EnrichWorkerProfilesSeeder: làm đầy hồ sơ {$enriched} công nhân.");
+
+        $this->seedDocuments($tenantId);
+    }
+
+    /**
+     * Người phụ thuộc + bằng cấp + chứng chỉ ATLĐ cho công nhân — các tab chi tiết
+     * đang trống với 1.200 CN (bảng chỉ có ~20 NV văn phòng demo).
+     *
+     * QUAN TRỌNG: PIT đọc số người phụ thuộc từ BẢNG dependents (PayrollRunService)
+     * → đổ bảng này là giảm trừ gia cảnh tự nhất quán với bảng lương. Lương CN
+     * 5,5–7,1tr dưới ngưỡng chịu thuế nên net không đổi.
+     *
+     * Idempotent: bỏ qua CN đã có dòng ở từng bảng tương ứng.
+     */
+    private function seedDocuments(int $tenantId): void
+    {
+        $today = \Carbon\CarbonImmutable::today();
+        $workers = DB::table('employees')
+            ->where('tenant_id', $tenantId)
+            ->where('employee_code', 'like', 'CN%')
+            ->get(['id', 'employee_code', 'full_name', 'gender', 'date_of_birth', 'hire_date', 'profile']);
+
+        $hasDep = DB::table('dependents')->whereIn('employee_id', $workers->pluck('id'))->pluck('employee_id')->flip();
+        $hasQual = DB::table('qualifications')->whereIn('employee_id', $workers->pluck('id'))->pluck('employee_id')->flip();
+        $hasCert = DB::table('certificates')->whereIn('employee_id', $workers->pluck('id'))->pluck('employee_id')->flip();
+
+        $deps = $quals = $certs = [];
+        foreach ($workers as $w) {
+            $n = (int) substr($w->employee_code, 2);
+            $profile = json_decode($w->profile ?: '{}', true) ?: [];
+            $ho = trim(explode(' ', trim((string) $w->full_name))[0] ?: 'Nguyễn');
+            $birthYear = $w->date_of_birth ? (int) substr($w->date_of_birth, 0, 4) : 1990;
+            $city = $this->cities[($n * 5) % count($this->cities)];
+            $now = now();
+
+            // ── Người phụ thuộc: đã kết hôn → 0-2 con (giảm trừ 6,2tr/người theo luật 2026).
+            if (! isset($hasDep[$w->id]) && ($profile['marital_status'] ?? '') === 'MARRIED') {
+                $kids = $n % 3;
+                for ($k = 0; $k < $kids; $k++) {
+                    $childAge = 1 + (($n * 13 + $k * 7) % 16); // 1..16 tuổi
+                    $boy = ($n + $k) % 2 === 0;
+                    $given = $boy ? $this->givenMale[($n + $k * 11) % count($this->givenMale)]
+                        : $this->givenFemale[($n + $k * 11) % count($this->givenFemale)];
+                    $mid = $boy ? $this->midMale[($n + $k) % count($this->midMale)]
+                        : $this->midFemale[($n + $k) % count($this->midFemale)];
+                    $dob = $today->subYears($childAge)->subDays(($n * 3 + $k * 41) % 300);
+                    $deps[] = [
+                        'employee_id' => $w->id, 'full_name' => "$ho $mid $given",
+                        'relationship' => 'Con', 'date_of_birth' => $dob->toDateString(),
+                        'deduction_percent' => 100, 'start_date' => $dob->toDateString(),
+                        'status' => 'ACTIVE', 'tenant_id' => $tenantId,
+                        'created_at' => $now, 'updated_at' => $now,
+                    ];
+                }
+            }
+
+            // ── Bằng cấp: 1 bằng cao nhất khớp education_level trong profile.
+            if (! isset($hasQual[$w->id])) {
+                [$name, $major, $school, $grad] = match ($profile['education_level'] ?? 'THPT') {
+                    'THCS' => ['Bằng tốt nghiệp THCS', null, "Trường THCS $city", $birthYear + 15],
+                    'Trung cấp nghề' => ['Bằng Trung cấp nghề', 'Vận hành thiết bị công nghiệp', "Trường Trung cấp nghề $city", $birthYear + 20],
+                    'Cao đẳng' => ['Bằng Cao đẳng', 'Công nghệ kỹ thuật cơ khí', "Trường Cao đẳng nghề $city", $birthYear + 21],
+                    default => ['Bằng tốt nghiệp THPT', null, "Trường THPT $city", $birthYear + 18],
+                };
+                $quals[] = [
+                    'employee_id' => $w->id, 'qualification_name' => $name, 'major' => $major,
+                    'school_name' => $school, 'graduation_year' => min($grad, (int) $today->format('Y')),
+                    'is_highest' => DB::raw('true'), 'tenant_id' => $tenantId,
+                    'created_at' => $now, 'updated_at' => $now,
+                ];
+            }
+
+            // ── Chứng chỉ: ATVSLĐ Nhóm 3 bắt buộc với công nhân sản xuất (NĐ 44/2016,
+            // tái huấn luyện 2 năm) → cấp lùi 0-17 tháng, luôn còn hạn. 1/3 thêm chứng
+            // chỉ vận hành máy.
+            if (! isset($hasCert[$w->id])) {
+                $issued = $today->subMonths($n % 18)->subDays($n % 28);
+                $certs[] = [
+                    'employee_id' => $w->id,
+                    'certificate_name' => 'Chứng chỉ huấn luyện an toàn, vệ sinh lao động (Nhóm 3)',
+                    'issued_by' => 'Trung tâm Huấn luyện ATVSLĐ '.$city,
+                    'issued_date' => $issued->toDateString(),
+                    'expiry_date' => $issued->addYears(2)->toDateString(),
+                    'certificate_number' => 'ATLD-'.$w->employee_code,
+                    'tenant_id' => $tenantId, 'created_at' => $now, 'updated_at' => $now,
+                ];
+                if ($n % 3 === 0) {
+                    $certs[] = [
+                        'employee_id' => $w->id,
+                        'certificate_name' => 'Chứng chỉ vận hành máy công nghiệp',
+                        'issued_by' => "Trường Cao đẳng nghề $city",
+                        'issued_date' => $issued->toDateString(), 'expiry_date' => null,
+                        'certificate_number' => 'VHM-'.$w->employee_code,
+                        'tenant_id' => $tenantId, 'created_at' => $now, 'updated_at' => $now,
+                    ];
+                }
+            }
+        }
+
+        foreach (array_chunk($deps, 500) as $chunk) {
+            DB::table('dependents')->insert($chunk);
+        }
+        foreach (array_chunk($quals, 500) as $chunk) {
+            DB::table('qualifications')->insert($chunk);
+        }
+        foreach (array_chunk($certs, 500) as $chunk) {
+            DB::table('certificates')->insert($chunk);
+        }
+        $this->command?->info('EnrichWorkerProfilesSeeder: +'.count($deps).' người phụ thuộc, +'.count($quals).' bằng cấp, +'.count($certs).' chứng chỉ.');
     }
 
     private function slug(string $s): string
