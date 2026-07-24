@@ -167,12 +167,93 @@ class PayrollController extends Controller
     /**
      * POST /salary-periods/{id}/close â€” ÄÃ³ng/chá»‘t ká»³ lÆ°Æ¡ng.
      */
-    public function closePeriod(int $id): JsonResponse
+    public function submitPeriod(Request $request, int $id): JsonResponse
     {
+        // Kế toán TRÌNH chốt kỳ (maker của maker–checker): OPEN → CHỜ_DUYỆT,
+        // ghi người trình vào meta, báo ADMIN vào duyệt.
         $period = SalaryPeriod::find($id);
 
         if (! $period) {
             return $this->notFound();
+        }
+        if ($period->isClosed() || (string) $period->status === 'CHỜ_DUYỆT') {
+            return $this->validationError(['status' => ['Kỳ lương đã chốt hoặc đang chờ duyệt']]);
+        }
+        if (! $period->salaryDetails()->exists()) {
+            return $this->validationError(['status' => ['Kỳ lương chưa có dữ liệu — hãy tính lương trước khi trình chốt']]);
+        }
+
+        $submitterId = $request->attributes->get('auth_employee_id');
+        $meta = is_string($period->meta) ? (json_decode($period->meta, true) ?: []) : (array) ($period->meta ?? []);
+        $meta['submitted_by'] = $submitterId;
+        $meta['submitted_at'] = now()->toIso8601String();
+        $period->update(['status' => 'CHỜ_DUYỆT', 'meta' => json_encode($meta, JSON_UNESCAPED_UNICODE)]);
+
+        \App\Support\Notifier::notifyMany(
+            $this->adminIds((int) $period->tenant_id),
+            'Chờ duyệt chốt kỳ lương',
+            "Kỳ {$period->period_code} đã được trình chốt. Vào trang Lương để duyệt.",
+            'salary_period', $period->id, ['priority' => 'high'], $submitterId
+        );
+
+        return $this->ok($period->fresh(), 'Đã trình chốt kỳ — chờ duyệt');
+    }
+
+    public function reopenPeriod(Request $request, int $id): JsonResponse
+    {
+        // Trả kỳ về Đang mở: người trình thu hồi, hoặc admin trả về để tính lại.
+        $period = SalaryPeriod::find($id);
+
+        if (! $period) {
+            return $this->notFound();
+        }
+        if ((string) $period->status !== 'CHỜ_DUYỆT') {
+            return $this->validationError(['status' => ['Chỉ kỳ đang chờ duyệt mới trả về được']]);
+        }
+
+        $callerId = (int) $request->attributes->get('auth_employee_id');
+        $meta = is_string($period->meta) ? (json_decode($period->meta, true) ?: []) : (array) ($period->meta ?? []);
+        $submitterId = (int) ($meta['submitted_by'] ?? 0);
+        if ($callerId !== $submitterId && ! $this->isAdminEmployee($callerId)) {
+            return response()->json(['status' => 403, 'message' => 'Chỉ người trình hoặc admin mới trả kỳ về', 'data' => null], 403);
+        }
+
+        unset($meta['submitted_by'], $meta['submitted_at']);
+        $period->update(['status' => 'OPEN', 'meta' => json_encode($meta, JSON_UNESCAPED_UNICODE)]);
+        if ($submitterId && $callerId !== $submitterId) {
+            \App\Support\Notifier::notify($submitterId, 'Kỳ lương bị trả về',
+                "Kỳ {$period->period_code} được trả về Đang mở" . ($request->input('comment') ? ': '.$request->input('comment') : '.'),
+                'salary_period', $period->id, ['priority' => 'high'], $callerId);
+        }
+
+        return $this->ok($period->fresh(), 'Kỳ lương đã trả về Đang mở');
+    }
+
+    public function closePeriod(Request $request, int $id): JsonResponse
+    {
+        // DUYỆT & chốt (checker): chỉ từ CHỜ_DUYỆT, người duyệt là ADMIN và KHÁC người trình.
+        $period = SalaryPeriod::find($id);
+
+        if (! $period) {
+            return $this->notFound();
+        }
+
+        if ((string) $period->status !== 'CHỜ_DUYỆT' && ! $period->isClosed()) {
+            return $this->validationError(['status' => ['Kỳ lương chưa được trình duyệt — kế toán cần Trình chốt kỳ trước']]);
+        }
+
+        $approverId = (int) $request->attributes->get('auth_employee_id');
+        $pmeta = is_string($period->meta) ? (json_decode($period->meta, true) ?: []) : (array) ($period->meta ?? []);
+        $submitterId = (int) ($pmeta['submitted_by'] ?? 0);
+        if ($submitterId && $approverId === $submitterId) {
+            return $this->validationError(['approver_id' => ['Người trình không thể tự duyệt chốt kỳ của mình']]);
+        }
+        if (! $this->isAdminEmployee($approverId)) {
+            return response()->json(['status' => 403, 'message' => 'Bạn không có quyền duyệt chốt kỳ lương', 'data' => null], 403);
+        }
+        if ($submitterId) {
+            \App\Support\Notifier::notify($submitterId, 'Kỳ lương đã được chốt',
+                "Kỳ {$period->period_code} đã được duyệt và chốt.", 'salary_period', $period->id, ['priority' => 'normal'], $approverId);
         }
 
         if ($period->isClosed()) {
@@ -397,9 +478,9 @@ class PayrollController extends Controller
             return $this->notFound('Không tìm thấy kỳ lương');
         }
 
-        // Pre-check kỳ khóa → 409 NGAY (khỏi đưa vào hàng đợi).
-        $locked = ['CLOSED', 'LOCKED', 'PAID', 'ĐÃ_ĐÓNG', 'DA_DONG', 'ĐÃ_TRẢ', 'DA_TRA'];
-        if (in_array((string) $period->status, $locked, true)) {
+        // Pre-check kỳ khóa → 409 NGAY (khỏi đưa vào hàng đợi). Dùng chung hằng với
+        // PayrollRunService — trước đây chép tay nên thiếu CHỜ_DUYỆT (maker–checker).
+        if (in_array((string) $period->status, PayrollRunService::LOCKED_PERIOD_STATUSES, true)) {
             return response()->json([
                 'status' => 409,
                 'message' => 'Kỳ lương đã khóa (' . $period->status . ') — không thể tính lại',
@@ -487,5 +568,34 @@ class PayrollController extends Controller
             'message' => 'Dá»¯ liá»‡u khÃ´ng há»£p lá»‡',
             'data' => ['errors' => $errors],
         ], 422);
+    }
+
+    /** Nhân viên giữ role ADMIN (hoặc super-admin) — người được duyệt chốt kỳ. */
+    private function isAdminEmployee(?int $employeeId): bool
+    {
+        if (! $employeeId) {
+            return false;
+        }
+        if (DB::table('employees')->where('id', $employeeId)->value('is_super_admin')) {
+            return true;
+        }
+
+        return DB::table('employee_roles as er')
+            ->join('roles as r', 'r.id', '=', 'er.role_id')
+            ->where('er.employee_id', $employeeId)
+            ->whereRaw('er.is_active = true')
+            ->where(fn ($q) => $q->where('r.role_code', 'ADMIN')->orWhereRaw("r.meta->>'is_admin' = 'true'"))
+            ->exists();
+    }
+
+    /** id các nhân viên giữ role ADMIN của tenant — người nhận thông báo trình duyệt. */
+    private function adminIds(int $tenantId): array
+    {
+        return DB::table('employee_roles as er')
+            ->join('roles as r', 'r.id', '=', 'er.role_id')
+            ->where('er.tenant_id', $tenantId)
+            ->whereRaw('er.is_active = true')
+            ->where('r.role_code', 'ADMIN')
+            ->pluck('er.employee_id')->unique()->values()->all();
     }
 }

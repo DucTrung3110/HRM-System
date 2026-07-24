@@ -26,7 +26,9 @@ use RuntimeException;
 class PayrollRunService
 {
     /** Period statuses that forbid (re)computation (đã chốt hoặc đã chi trả). */
-    private const LOCKED_PERIOD_STATUSES = ['CLOSED', 'LOCKED', 'PAID', 'ĐÃ_ĐÓNG', 'DA_DONG', 'ĐÃ_TRẢ', 'DA_TRA'];
+    // CHỜ_DUYỆT: kỳ đã trình chốt (maker–checker) — cấm tính lại khi đang chờ duyệt.
+    // PUBLIC vì PayrollController::run() pre-check trước khi dispatch (1 nguồn, khỏi trôi lệch).
+    public const LOCKED_PERIOD_STATUSES = ['CLOSED', 'LOCKED', 'PAID', 'ĐÃ_ĐÓNG', 'DA_DONG', 'ĐÃ_TRẢ', 'DA_TRA', 'CHỜ_DUYỆT'];
 
     public function __construct(
         private readonly PayrollTaxService $tax,
@@ -72,7 +74,8 @@ class PayrollRunService
             ->where('tenant_id', $tenantId)
             ->where('legal_entity_id', $legalEntityId)
             ->whereIn('status', ['ACTIVE', 'PROBATION'])
-            ->whereRaw("COALESCE((profile->>'system_account')::boolean, false) = false")
+            ->where(fn ($query) => $query->whereNull('hire_date')->orWhere('hire_date', '<=', $periodEnd))
+            ->where(fn ($query) => $query->whereNull('profile->system_account')->orWhere('profile->system_account', false))
             ->get(['id', 'employee_code', 'base_salary']);
 
         $now = now();
@@ -89,6 +92,7 @@ class PayrollRunService
         ): void {
             foreach ($employees as $emp) {
                 $employeeId = (int) $emp->id;
+                $contract = $this->effectiveContract($employeeId, $tenantId, $legalEntityId, $periodStart, $periodEnd);
 
                 // Respect an individually pinned (locked) detail — skip recompute.
                 $existing = DB::table('salary_details')
@@ -109,7 +113,7 @@ class PayrollRunService
                 // active contract's meta.basic_salary so payroll still runs.
                 $baseSalary = (float) ($emp->base_salary ?? 0);
                 if ($baseSalary <= 0.0) {
-                    $baseSalary = $this->contractBaseSalary($employeeId);
+                    $baseSalary = $this->contractBaseSalary($contract);
                 }
 
                 // Still no base salary → skip rather than clobber any existing,
@@ -208,7 +212,7 @@ class PayrollRunService
                     ->where('employee_id', $employeeId)
                     ->whereIn('status', ['APPROVED', 'ĐÃ_DUYỆT'])
                     ->whereBetween('work_date', [$periodStart, $periodEnd])
-                    ->whereRaw("COALESCE((meta->>'converted_to_comp_off')::boolean, false) = false")
+                    ->where(fn ($query) => $query->whereNull('meta->converted_to_comp_off')->orWhere('meta->converted_to_comp_off', false))
                     ->get(['total_hours', 'meta']);
 
                 $overtimeHours = 0.0;      // tổng giờ OT thô (để hiển thị)
@@ -265,16 +269,28 @@ class PayrollRunService
                     ->whereBetween('work_date', [$periodStart, $periodEnd])
                     ->sum('amount');
 
+                // Thưởng / lương tháng 13 / thưởng Tết cho kỳ này (payroll_adjustments,
+                // type BONUS/THANG_13/THUONG…). LUẬT VN: thưởng CHỊU thuế TNCN nhưng
+                // KHÔNG đóng BHXH — nên cộng vào gross + thu nhập chịu thuế, còn BH vẫn
+                // tính trên $baseSalary (không đổi ⇒ thưởng nằm ngoài nền BHXH, Đ.89 Luật BHXH).
+                $bonusTotal = (float) DB::table('payroll_adjustments')
+                    ->where('tenant_id', $tenantId)
+                    ->where('employee_id', $employeeId)
+                    ->where('paid_period_id', $salaryPeriodId)
+                    ->whereIn('adjustment_type', ['BONUS', 'THANG_13', 'THUONG', 'THUONG_TET'])
+                    ->whereRaw("UPPER(COALESCE(status, '')) NOT IN ('CANCELLED', 'REJECTED', 'VOID')")
+                    ->sum('amount');
+
                 // GROSS = tổng thu nhập TRƯỚC khấu trừ. Khấu trừ cố định (tạm ứng,
                 // đoàn phí…) là khấu trừ SAU THUẾ: trừ vào NET, KHÔNG giảm gross và
                 // KHÔNG giảm thu nhập chịu thuế (chỉ BH + giảm trừ gia cảnh mới
                 // giảm thuế). Trước đây trừ vào gross → gross sai + tính thiếu thuế.
-                $gross = round(max(0.0, $proratedBase + $proratedAllowance + $overtimePay + $pieceRatePay), 4);
+                $gross = round(max(0.0, $proratedBase + $proratedAllowance + $overtimePay + $pieceRatePay + $bonusTotal), 4);
                 // Thu nhập chịu thuế: dùng $overtimeTaxable (đã loại phần phụ trội
-                // OT được miễn thuế) thay vì toàn bộ $overtimePay.
+                // OT được miễn thuế) thay vì toàn bộ $overtimePay. Thưởng cộng đủ (chịu thuế).
                 $grossTaxable = $allowancesTaxable
-                    ? round(max(0.0, $proratedBase + $proratedAllowance + $overtimeTaxable + $pieceRatePay), 4)
-                    : round(max(0.0, $proratedBase + $overtimeTaxable + $pieceRatePay), 4);
+                    ? round(max(0.0, $proratedBase + $proratedAllowance + $overtimeTaxable + $pieceRatePay + $bonusTotal), 4)
+                    : round(max(0.0, $proratedBase + $overtimeTaxable + $pieceRatePay + $bonusTotal), 4);
 
                 // Active dependents registered within the period window.
                 // status is mixed-encoded across data ('true','1','ACTIVE',NULL);
@@ -324,6 +340,7 @@ class PayrollRunService
                     'overtime_premium_pay' => $otPremiumPay,
                     'overtime_premium_tax_exempt' => $otPremiumExempt,
                     'piece_rate_pay' => $pieceRatePay,
+                    'bonus_total' => $bonusTotal,
                     'fixed_deduction_total' => $fixedDeductions,
                     'gross' => $gross,
                     'gross_taxable' => $grossTaxable,
@@ -341,6 +358,7 @@ class PayrollRunService
                 ];
 
                 $detailPayload = TenantContext::stamp([
+                    'contract_id' => $contract?->id,
                     'gross_salary' => $gross,
                     'net_salary' => $net,
                     'transfer_status' => $existing->transfer_status ?? 'PENDING',
@@ -367,6 +385,7 @@ class PayrollRunService
                     ['EARNING', 'OVERTIME', 'Tăng ca', $overtimePay],
                     ['INFO', 'OT_EXEMPT', 'Phụ trội tăng ca (miễn thuế TNCN)', $otPremiumExempt ? $otPremiumPay : 0.0],
                     ['EARNING', 'PIECE_RATE', 'Công khoán sản phẩm', $pieceRatePay],
+                    ['EARNING', 'BONUS', 'Thưởng / Lương tháng 13', $bonusTotal],
                     ['DEDUCTION', 'INS_BHXH', 'BHXH (8%)', $empInsurance['bhxh']],
                     ['DEDUCTION', 'INS_BHYT', 'BHYT (1.5%)', $empInsurance['bhyt']],
                     ['DEDUCTION', 'INS_BHTN', 'BHTN (1%)', $empInsurance['bhtn']],
@@ -421,18 +440,28 @@ class PayrollRunService
         return is_array($meta) && ! empty($meta['locked']);
     }
 
-    /**
-     * Fallback base salary from the employee's active contract (meta.basic_salary)
-     * when employees.base_salary is empty. Keeps payroll robust to denorm drift.
-     */
-    private function contractBaseSalary(int $employeeId): float
-    {
-        $contract = DB::table('contracts')
+    /** Hợp đồng có hiệu lực giao với kỳ lương, mới nhất thắng nếu có nhiều bản ghi. */
+    private function effectiveContract(
+        int $employeeId,
+        int $tenantId,
+        int $legalEntityId,
+        string $periodStart,
+        string $periodEnd,
+    ): ?object {
+        return DB::table('contracts')
+            ->where('tenant_id', $tenantId)
+            ->where('legal_entity_id', $legalEntityId)
             ->where('employee_id', $employeeId)
-            ->whereIn('status', ['CÓ_HIỆU_LỰC', 'ACTIVE'])
+            ->whereIn('status', ['ACTIVE', 'CÓ_HIỆU_LỰC', 'ĐANG_HIỆU_LỰC'])
+            ->where('start_date', '<=', $periodEnd)
+            ->where(fn ($query) => $query->whereNull('end_date')->orWhere('end_date', '>=', $periodStart))
+            ->orderByDesc('start_date')
             ->orderByDesc('id')
-            ->first();
+            ->first(['id', 'meta']);
+    }
 
+    private function contractBaseSalary(?object $contract): float
+    {
         if (! $contract || ! $contract->meta) {
             return 0.0;
         }

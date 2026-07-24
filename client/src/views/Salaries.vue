@@ -49,17 +49,30 @@
             <span v-if="runLoading">{{ runProgress || 'Đang tính…' }}</span>
             <span v-else>⚡ Tính lương kỳ này</span>
           </BaseButton>
+          <!-- Maker–checker: kế toán TRÌNH → admin DUYỆT & chốt (không ai tự chốt 1 bước). -->
           <BaseButton
+            v-if="!periodPendingClose"
             variant="outline"
             :disabled="!selectedPeriodId || periodLocked || !details.length"
-            @click="closePeriod"
-            data-testid="button-close-period"
+            @click="submitClose"
+            data-testid="button-submit-period"
           >
-            🔒 Chốt kỳ
+            📤 Trình chốt kỳ
           </BaseButton>
+          <template v-else>
+            <BaseButton v-if="isFullAdmin" variant="outline" @click="approveClose" data-testid="button-close-period">
+              ✅ Duyệt &amp; chốt kỳ
+            </BaseButton>
+            <BaseButton variant="outline" @click="reopenPeriodFn" data-testid="button-reopen-period">
+              ↩ Trả về / Thu hồi
+            </BaseButton>
+          </template>
         </div>
       </div>
-      <p v-if="isAdmin && periodLocked" class="mt-3 text-xs text-amber-600">
+      <p v-if="isAdmin && periodPendingClose" class="mt-3 text-xs text-amber-600">
+        Kỳ đã trình chốt, đang chờ admin duyệt — tạm khóa tính lại. Người trình không thể tự duyệt.
+      </p>
+      <p v-else-if="isAdmin && periodLocked" class="mt-3 text-xs text-amber-600">
         Kỳ đã {{ periodStatusVN(selectedPeriod?.status).toLowerCase() }} — không thể tính lại hoặc chỉnh sửa (bảo toàn lương đã trả).
       </p>
       <p v-else-if="isAdmin" class="mt-3 text-xs text-muted-foreground">
@@ -313,10 +326,13 @@ const payslipLoading = ref(false);
 const payslip = ref(null);      // { salary_detail, breakdowns, attendance_summary }
 
 // Trạng thái kỳ khóa tính lại (đồng bộ với PayrollRunService::LOCKED_PERIOD_STATUSES)
-const LOCKED_STATUSES = ['CLOSED', 'LOCKED', 'PAID', 'ĐÃ_ĐÓNG', 'DA_DONG', 'ĐÃ_TRẢ', 'DA_TRA'];
+const LOCKED_STATUSES = ['CLOSED', 'LOCKED', 'PAID', 'ĐÃ_ĐÓNG', 'DA_DONG', 'ĐÃ_TRẢ', 'DA_TRA', 'CHỜ_DUYỆT'];
 
 const selectedPeriod = computed(() => periods.value.find(p => String(p.id) === String(selectedPeriodId.value)) || null);
 const periodLocked = computed(() => selectedPeriod.value && LOCKED_STATUSES.includes(String(selectedPeriod.value.status)));
+// Maker–checker: kỳ đã trình chốt, chờ admin duyệt.
+const periodPendingClose = computed(() => String(selectedPeriod.value?.status) === 'CHỜ_DUYỆT');
+const isFullAdmin = computed(() => authService.getAccess().full === true);
 
 const periodOptions = computed(() => {
   // Đa pháp nhân: cùng mã kỳ lặp theo pháp nhân → chỉ thêm tên pháp nhân khi có nhiều pháp nhân.
@@ -385,6 +401,7 @@ const num = (v) => {
 
 const periodStatusVN = (s) => ({
   OPEN: 'Đang mở', PAID: 'Đã trả lương', CLOSED: 'Đã chốt', LOCKED: 'Đã khóa',
+  'CHỜ_DUYỆT': 'Chờ duyệt chốt',
 }[String(s)] || s || '—');
 const periodBadgeClass = (s) => {
   const base = 'inline-block px-2.5 py-1 rounded-full text-xs font-semibold ';
@@ -491,16 +508,41 @@ const pollPayrollStatus = async (periodId, total) => {
   return { run_status: 'FAILED', error: 'Quá thời gian chờ tính lương' };
 };
 
-const closePeriod = async () => {
+// Maker–checker chốt kỳ: trình (kế toán) → duyệt & chốt (admin) / trả về.
+const submitClose = async () => {
   if (!selectedPeriodId.value || periodLocked.value) return;
-  if (!window.confirm(`Chốt kỳ ${selectedPeriod.value?.period_code}? Sau khi chốt sẽ KHÔNG thể tính lại lương kỳ này.`)) return;
+  if (!window.confirm(`Trình chốt kỳ ${selectedPeriod.value?.period_code}? Kỳ sẽ tạm khóa tính lại cho tới khi được duyệt.`)) return;
+  try {
+    await salaryService.submitPeriod(Number(selectedPeriodId.value));
+    notificationStore.addSuccess('Đã trình chốt kỳ — chờ admin duyệt');
+    await loadPeriods();
+  } catch (err) {
+    notificationStore.addError(err.response?.data?.data?.errors?.status?.[0] || err.response?.data?.message || 'Không thể trình chốt kỳ');
+  }
+};
+
+const approveClose = async () => {
+  if (!selectedPeriodId.value) return;
+  if (!window.confirm(`Duyệt và CHỐT kỳ ${selectedPeriod.value?.period_code}? Sau khi chốt sẽ KHÔNG thể tính lại lương kỳ này.`)) return;
   try {
     await salaryService.closePeriod(Number(selectedPeriodId.value));
-    notificationStore.addSuccess('Đã chốt kỳ lương');
+    notificationStore.addSuccess('Đã duyệt và chốt kỳ lương');
     await loadPeriods();
     await loadDetails();
   } catch (err) {
-    notificationStore.addError(err.response?.data?.message || 'Không thể chốt kỳ');
+    notificationStore.addError(err.response?.data?.data?.errors?.approver_id?.[0] || err.response?.data?.message || 'Không thể chốt kỳ');
+  }
+};
+
+const reopenPeriodFn = async () => {
+  if (!selectedPeriodId.value) return;
+  if (!window.confirm(`Trả kỳ ${selectedPeriod.value?.period_code} về Đang mở?`)) return;
+  try {
+    await salaryService.reopenPeriod(Number(selectedPeriodId.value));
+    notificationStore.addSuccess('Kỳ đã trả về Đang mở');
+    await loadPeriods();
+  } catch (err) {
+    notificationStore.addError(err.response?.data?.message || 'Không thể trả kỳ về');
   }
 };
 
