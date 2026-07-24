@@ -599,7 +599,8 @@
             </div>
             <div>
               <p class="text-sm text-muted-foreground">Giới tính</p>
-              <p class="font-medium mt-1">{{ currentEmployee.gender === 'male' ? 'Nam' : currentEmployee.gender === 'female' ? 'Nữ' : '-' }}</p>
+              <!-- Canonical DB là MALE/FEMALE (hoa) — so sánh không phân biệt hoa thường. -->
+              <p class="font-medium mt-1">{{ String(currentEmployee.gender).toUpperCase() === 'MALE' ? 'Nam' : String(currentEmployee.gender).toUpperCase() === 'FEMALE' ? 'Nữ' : '-' }}</p>
             </div>
             <div class="md:col-span-2">
               <p class="text-sm text-muted-foreground">Địa chỉ</p>
@@ -619,8 +620,11 @@
             </div>
             <div>
               <p class="text-sm text-muted-foreground">Trạng thái</p>
-              <BaseBadge :variant="currentEmployee.is_active ? 'success' : 'destructive'">
-                {{ currentEmployee.is_active ? 'Đang làm việc' : 'Đã nghỉ' }}
+              <!-- Bảng employees KHÔNG có cột is_active (luôn undefined → ai cũng "Đã nghỉ").
+                   Đọc status thật: ACTIVE/PROBATION là đang làm. -->
+              <BaseBadge :variant="['ACTIVE','PROBATION'].includes(String(currentEmployee.status).toUpperCase()) ? 'success' : 'destructive'">
+                {{ String(currentEmployee.status).toUpperCase() === 'PROBATION' ? 'Thử việc'
+                  : String(currentEmployee.status).toUpperCase() === 'ACTIVE' ? 'Đang làm việc' : 'Đã nghỉ' }}
               </BaseBadge>
             </div>
           </div>
@@ -1025,7 +1029,9 @@ const rosterDays = computed(() => {
       dayName: names[i % 7],
       isToday: dateStr === todayStr,
       isWeekend: i % 7 >= 5,
-      shift: resolveShiftFor(dateStr),
+      // Chủ nhật = ngày nghỉ toàn hệ thống (TimePolicy) — không hiện ca dù có
+      // phân ca cố định (assignment permanent áp mọi ngày).
+      shift: i % 7 === 6 ? null : resolveShiftFor(dateStr),
     });
   }
   return days;
