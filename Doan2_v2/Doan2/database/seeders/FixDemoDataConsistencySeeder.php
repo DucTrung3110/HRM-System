@@ -114,6 +114,61 @@ class FixDemoDataConsistencySeeder extends Seeder
             $this->command?->info("Created contract {$seq} for #{$e->id} {$e->full_name}");
             $seq++;
         }
+
+        $this->shiftStaleDemoDates();
+    }
+
+    /**
+     * 4) Dữ liệu demo legacy mang mốc năm cũ (đơn nghỉ 3/2024, tin "bóng đá 2024"…)
+     * làm demo mất uy tín — dời về năm hiện tại. Đơn PENDING phải ở TƯƠNG LAI
+     * (đơn chờ duyệt mà ngày nghỉ đã qua 2 năm là vô lý). Chạy lại an toàn:
+     * điều kiện lọc theo "năm cũ" nên lần 2 không còn gì để dời.
+     */
+    private function shiftStaleDemoDates(): void
+    {
+        $year = (int) now()->format('Y');
+        $today = now()->toDateString();
+
+        // Đơn nghỉ năm cũ → cộng đủ số năm để rơi vào năm hiện tại (giữ ngày/tháng).
+        $stale = DB::table('leave_requests')->whereRaw('EXTRACT(YEAR FROM start_date) < ?', [$year])->get();
+        foreach ($stale as $lr) {
+            $diff = $year - (int) date('Y', strtotime($lr->start_date));
+            DB::table('leave_requests')->where('id', $lr->id)->update([
+                'start_date' => date('Y-m-d', strtotime("+{$diff} years", strtotime($lr->start_date))),
+                'end_date' => date('Y-m-d', strtotime("+{$diff} years", strtotime($lr->end_date))),
+                'updated_at' => now(),
+            ]);
+        }
+
+        // Đơn PENDING mà ngày bắt đầu đã qua → dời sang tuần tới (giữ số ngày nghỉ).
+        $pastPending = DB::table('leave_requests')
+            ->whereIn('status', ['PENDING', 'CHỜ_DUYỆT'])->where('start_date', '<', $today)->get();
+        foreach ($pastPending as $lr) {
+            $len = max(0, (strtotime($lr->end_date) - strtotime($lr->start_date)) / 86400);
+            $newStart = date('Y-m-d', strtotime('+7 days'));
+            DB::table('leave_requests')->where('id', $lr->id)->update([
+                'start_date' => $newStart,
+                'end_date' => date('Y-m-d', strtotime("+{$len} days", strtotime($newStart))),
+                'updated_at' => now(),
+            ]);
+        }
+
+        // Tin tức / thông báo còn nhắc năm cũ trong chữ → thay bằng năm hiện tại.
+        foreach ([2023, 2024, 2025] as $old) {
+            DB::table('news')->whereRaw('title LIKE ? OR content LIKE ?', ["%{$old}%", "%{$old}%"])
+                ->update([
+                    'title' => DB::raw("replace(title, '{$old}', '{$year}')"),
+                    'content' => DB::raw("replace(content, '{$old}', '{$year}')"),
+                    'updated_at' => now(),
+                ]);
+            DB::table('notifications')->whereRaw('message LIKE ?', ["%/{$old}%"])
+                ->update([
+                    'message' => DB::raw("replace(message, '/{$old}', '/{$year}')"),
+                    'updated_at' => now(),
+                ]);
+        }
+
+        $this->command?->info('Đã dời '.$stale->count().' đơn nghỉ năm cũ + '.$pastPending->count().' đơn PENDING quá hạn về mốc hiện tại.');
     }
 
     private function decode($p): array
