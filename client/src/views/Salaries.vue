@@ -21,6 +21,13 @@
         >
           PDF (Cả kỳ)
         </button>
+        <button
+          @click="exportBankFile"
+          data-testid="button-bank-file"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors"
+        >
+          🏦 File ngân hàng
+        </button>
       </div>
     </div>
 
@@ -686,6 +693,44 @@ const bulkExportCsv = () => {
   ];
   downloadCsv(data, `BangLuong_${selectedPeriod.value?.period_code || 'ky'}.csv`);
   notificationStore.addSuccess('Đã xuất bảng lương cả kỳ');
+};
+
+// File chuyển khoản ngân hàng (bulk): kế toán upload lên internet banking để trả
+// lương cả kỳ 1 lần. Cột theo mẫu chung VCB/BIDV/ACB; NV thiếu STK bị tách riêng
+// cuối file để HR bổ sung (không âm thầm bỏ sót người).
+const exportBankFile = async () => {
+  if (!details.value.length) return;
+  // Gom ĐỦ mọi trang của kỳ (bảng đang hiển thị chỉ là 1 trang) — file thiếu người
+  // là tai nạn trả lương thật.
+  let all = [];
+  for (let page = 1; page < 100; page++) {
+    const chunk = await salaryService.getDetails({ period_id: Number(selectedPeriodId.value), per_page: 100, page });
+    const rows = Array.isArray(chunk) ? chunk : (chunk?.items || []);
+    all = all.concat(rows);
+    if (rows.length < 100) break;
+  }
+  const profileOf = (d) => {
+    const p = d.employee?.profile;
+    if (!p) return {};
+    if (typeof p === 'string') { try { return JSON.parse(p); } catch { return {}; } }
+    return p;
+  };
+  const withAcc = [], noAcc = [];
+  all.forEach(d => (profileOf(d).bank_account ? withAcc : noAcc).push(d));
+  const code = selectedPeriod.value?.period_code || '';
+  const data = [
+    ['STT', 'Số tài khoản', 'Tên người thụ hưởng', 'Ngân hàng', 'Số tiền', 'Diễn giải'],
+    ...withAcc.map((d, i) => {
+      const p = profileOf(d);
+      return [i + 1, p.bank_account, d.employee?.full_name || '', p.bank_name || '', Math.round(Number(d.net_salary || 0)), `Luong ${code} ${d.employee?.employee_code || ''}`];
+    }),
+  ];
+  if (noAcc.length) {
+    data.push([], [`CHƯA CÓ SỐ TÀI KHOẢN (${noAcc.length} NV — bổ sung hồ sơ rồi xuất lại)`]);
+    noAcc.forEach((d, i) => data.push([i + 1, '', d.employee?.full_name || '', '', Math.round(Number(d.net_salary || 0)), d.employee?.employee_code || '']));
+  }
+  downloadCsv(data, `ChuyenKhoan_${code || 'ky'}.csv`);
+  notificationStore.addSuccess(`File ngân hàng: ${withAcc.length} NV có STK${noAcc.length ? `, ${noAcc.length} NV thiếu STK` : ''}`);
 };
 
 const bulkExportPDF = async () => {

@@ -276,6 +276,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/salary-periods/{id}/reopen', [PayrollController::class, 'reopenPeriod'])->whereNumber('id');
         Route::post('/salary-periods/{id}/close', [PayrollController::class, 'closePeriod'])->whereNumber('id');
         Route::post('/payroll/run', [PayrollController::class, 'run']);
+        Route::post('/payroll/bonus-run', [PayrollController::class, 'bonusRun']);
         Route::get('/payroll/run-status', [PayrollController::class, 'runStatus']);
         // Công khoán theo sản phẩm (piece-rate).
         Route::get('/piece-rate-entries', [PieceRateController::class, 'index']);

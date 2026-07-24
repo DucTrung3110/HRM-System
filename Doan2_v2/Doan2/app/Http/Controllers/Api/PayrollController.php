@@ -167,6 +167,90 @@ class PayrollController extends Controller
     /**
      * POST /salary-periods/{id}/close â€” ÄÃ³ng/chá»‘t ká»³ lÆ°Æ¡ng.
      */
+    /**
+     * POST /payroll/bonus-run — Sinh thưởng đợt theo công thức nhà máy ADMS/Aureole:
+     *   thưởng = rate% × (LCB + phụ cấp trách nhiệm/chức vụ) × (tháng làm thực tế / số tháng cửa sổ)
+     * Ghi vào payroll_adjustments (type BONUS) của kỳ chỉ định — engine lương tự cộng
+     * vào gross + thu nhập chịu thuế, KHÔNG vào nền BHXH (đúng phiếu thật + Đ.89).
+     * Idempotent theo meta.batch: chạy lại cùng cửa sổ sẽ thay thế batch cũ.
+     */
+    public function bonusRun(Request $request): JsonResponse
+    {
+        $v = Validator::make($request->all(), [
+            'salary_period_id' => 'required|integer|exists:salary_periods,id',
+            'window_start' => 'required|date',
+            'window_end' => 'required|date|after:window_start',
+            'rate_percent' => 'nullable|numeric|min:1|max:300',
+        ]);
+        if ($v->fails()) {
+            return $this->validationError($v->errors()->toArray());
+        }
+
+        $periodId = (int) $request->input('salary_period_id');
+        $period = SalaryPeriod::find($periodId);
+        if (! $period || in_array((string) $period->status, PayrollRunService::LOCKED_PERIOD_STATUSES, true)) {
+            return $this->validationError(['salary_period_id' => ['Kỳ lương không tồn tại hoặc đã khóa']]);
+        }
+
+        $tenantId = (int) $period->tenant_id;
+        $rate = (float) ($request->input('rate_percent') ?? 50) / 100;
+        $winStart = new \DateTimeImmutable($request->input('window_start'));
+        $winEnd = new \DateTimeImmutable($request->input('window_end'));
+        $windowMonths = max(1, round(($winStart->diff($winEnd)->days + 1) / 30.4));
+        $batch = 'BONUS-'.$winStart->format('Ymd').'-'.$winEnd->format('Ymd');
+
+        // Chạy lại → thay batch cũ (không nhân đôi thưởng).
+        DB::table('payroll_adjustments')->where('tenant_id', $tenantId)
+            ->where('paid_period_id', $periodId)->whereRaw("meta->>'batch' = ?", [$batch])->delete();
+
+        $employees = DB::table('employees')->where('tenant_id', $tenantId)
+            ->whereIn('status', ['ACTIVE', 'PROBATION'])->whereNotNull('base_salary')
+            ->get(['id', 'base_salary', 'hire_date', 'legal_entity_id']);
+
+        // Phụ cấp trách nhiệm/chức vụ (PC-CV) — thành phần thứ 2 của công thức ADMS.
+        $respAllow = DB::table('employee_allowances as ea')
+            ->join('allowances as a', 'a.id', '=', 'ea.allowance_id')
+            ->where('ea.tenant_id', $tenantId)->where('ea.is_active', DB::raw('true'))
+            ->where('a.allowance_code', 'PC-CV')
+            ->pluck('ea.amount', 'ea.employee_id');
+
+        $rows = [];
+        $total = 0.0;
+        foreach ($employees as $e) {
+            // Tháng làm thực tế trong cửa sổ (theo hire_date; ponytail: chưa trừ
+            // tháng nghỉ không lương/thai sản — bổ sung khi HR cần chính xác từng người).
+            $from = max($winStart, new \DateTimeImmutable((string) ($e->hire_date ?: '1900-01-01')));
+            if ($from > $winEnd) {
+                continue;
+            }
+            $months = min($windowMonths, max(0, round(($from->diff($winEnd)->days + 1) / 30.4)));
+            if ($months <= 0) {
+                continue;
+            }
+            $amount = round(((float) $e->base_salary + (float) ($respAllow[$e->id] ?? 0)) * $rate * $months / $windowMonths, 0);
+            if ($amount <= 0) {
+                continue;
+            }
+            $rows[] = [
+                'employee_id' => $e->id, 'paid_period_id' => $periodId,
+                'adjustment_type' => 'BONUS', 'amount' => $amount, 'status' => 'APPLIED',
+                'meta' => json_encode(['batch' => $batch, 'rate' => $rate, 'months' => $months,
+                    'window_months' => $windowMonths, 'formula' => 'ADMS: rate×(LCB+PC-CV)×months/window'], JSON_UNESCAPED_UNICODE),
+                'tenant_id' => $tenantId, 'legal_entity_id' => $e->legal_entity_id,
+                'created_at' => now(), 'updated_at' => now(),
+            ];
+            $total += $amount;
+        }
+        foreach (array_chunk($rows, 500) as $chunk) {
+            DB::table('payroll_adjustments')->insert($chunk);
+        }
+
+        return $this->ok([
+            'batch' => $batch, 'employees' => count($rows), 'total' => $total,
+            'note' => 'Chạy lại Tính lương kỳ này để thưởng vào bảng lương',
+        ], 'Đã sinh thưởng đợt cho '.count($rows).' nhân viên');
+    }
+
     public function submitPeriod(Request $request, int $id): JsonResponse
     {
         // Kế toán TRÌNH chốt kỳ (maker của maker–checker): OPEN → CHỜ_DUYỆT,
@@ -286,7 +370,8 @@ class PayrollController extends Controller
         $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
 
         $query = SalaryDetail::with([
-            'employee:id,full_name,employee_code,department_id',
+            // profile: FE cần bank_name/bank_account để xuất file chuyển khoản ngân hàng.
+            'employee:id,full_name,employee_code,department_id,profile',
             'employee.department:id,department_name',
             'period:id,period_code,status,end_date',
         ])->orderByDesc('id');
