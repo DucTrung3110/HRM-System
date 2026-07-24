@@ -38,6 +38,7 @@ class SendExpiryReminders extends Command
 
             $sent = $this->remindContracts($tenantId, $today, $limit, $days);
             $sent += $this->remindCertificates($tenantId, $today, $limit);
+            $sent += $this->remindCarryover($tenantId, $today);
             $this->info("Tenant {$tenantId}: gửi {$sent} thông báo nhắc hạn.");
             TenantContext::clear();
         }
@@ -109,6 +110,42 @@ class SendExpiryReminders extends Command
                     . '. Vui lòng đăng ký gia hạn/tái huấn luyện.',
                 'certificate', $c->id, ['priority' => 'normal']
             );
+            $sent++;
+        }
+
+        return $sent;
+    }
+
+    /** Nhắc phép gộp sắp hết hạn (≤30 ngày trước deadline nội quy, mặc định 31/03). */
+    private function remindCarryover(int $tenantId, CarbonImmutable $today): int
+    {
+        [$m, $d] = array_map('intval', explode('-', (string) HrmConfig::get('leave.carryover_deadline', '03-31')) + [1 => 31]);
+        $deadline = CarbonImmutable::create((int) $today->format('Y'), max(1, $m), max(1, $d));
+        if ($today->gt($deadline) || $today->lt($deadline->subDays(30))) {
+            return 0; // ngoài cửa sổ nhắc
+        }
+
+        $balances = DB::table('leave_balances')
+            ->where('tenant_id', $tenantId)
+            ->where('year', $today->format('Y'))
+            ->whereRaw("COALESCE((meta->>'carryover')::numeric, 0) > 0")
+            ->whereRaw("meta->>'carryover_expired' IS NULL")
+            ->where('remaining_days', '>', 0)
+            ->get(['id', 'employee_id', 'remaining_days', 'meta']);
+
+        $sent = 0;
+        foreach ($balances as $b) {
+            if ($this->alreadyNotified('carryover', $b->id, self::DEDUP_DAYS)) {
+                continue;
+            }
+            $carry = (float) (json_decode($b->meta ?: '{}', true)['carryover'] ?? 0);
+            $atRisk = min($carry, (float) $b->remaining_days);
+            if ($atRisk <= 0) {
+                continue;
+            }
+            Notifier::notify((int) $b->employee_id, 'Phép gộp sắp hết hạn',
+                "Bạn còn {$atRisk} ngày phép chuyển từ năm trước, hết hạn ngày {$deadline->format('d/m/Y')} theo nội quy — hãy sắp xếp nghỉ trước hạn.",
+                'carryover', $b->id, ['priority' => 'high']);
             $sent++;
         }
 

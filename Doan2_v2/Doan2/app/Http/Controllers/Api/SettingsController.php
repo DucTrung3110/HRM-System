@@ -62,6 +62,10 @@ class SettingsController extends Controller
                 ['key' => 'leave.maternity_days', 'label' => 'Nghỉ thai sản — ngày (Đ.139 / BHXH)', 'type' => 'int'],
                 ['key' => 'leave.maternity_days_second_child', 'label' => 'Thai sản sinh con thứ 2 — ngày (luật 01/07/2026)', 'type' => 'int'],
                 ['key' => 'leave.unpaid_personal_days', 'label' => 'Nghỉ việc riêng không lương — ngày/lần (Đ.115.2)', 'type' => 'int'],
+                // Carryover: LUẬT không quy định trần/hạn (Đ.113.4 chỉ cho thỏa thuận
+                // gộp ≤3 năm/lần) — đây là CHÍNH SÁCH nội quy từng công ty → config.
+                ['key' => 'leave.carryover_max_days', 'label' => 'Phép gộp: số ngày chuyển tối đa (0 = không giới hạn)', 'type' => 'int'],
+                ['key' => 'leave.carryover_deadline', 'label' => 'Phép gộp: hạn dùng phép năm cũ (MM-DD, vd 03-31)', 'type' => 'string'],
             ],
         ],
         'approval' => [

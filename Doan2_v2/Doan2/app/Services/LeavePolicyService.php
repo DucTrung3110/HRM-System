@@ -241,15 +241,18 @@ class LeavePolicyService
             foreach ($annualTypeIds as $leaveTypeId) {
                 $entitlement = $this->annualEntitlement($employee, $year);
 
-                // Carryover = prior-year remaining (no cap for now).
+                // Carryover = prior-year remaining, TRẦN theo nội quy (0 = không giới hạn
+                // — luật Đ.113.4 không đặt trần, đây là chính sách công ty qua config).
                 $carryover = (float) (DB::table('leave_balances')
                     ->where('tenant_id', $tenantId)
                     ->where('employee_id', $employee->id)
                     ->where('leave_type_id', $leaveTypeId)
                     ->where('year', $prevYearStr)
                     ->value('remaining_days') ?? 0);
-
-                $total = $entitlement + $carryover;
+                $cap = (float) HrmConfig::get('leave.carryover_max_days', 0);
+                if ($cap > 0) {
+                    $carryover = min($carryover, $cap);
+                }
 
                 $existing = DB::table('leave_balances')
                     ->where('tenant_id', $tenantId)
@@ -258,11 +261,16 @@ class LeavePolicyService
                     ->where('year', $yearStr)
                     ->first();
 
-                $used = (float) ($existing->used_days ?? 0);
-                $remaining = $total - $used;
-
                 $meta = $existing && $existing->meta ? json_decode($existing->meta, true) : [];
                 $meta = is_array($meta) ? $meta : [];
+
+                // Phần carryover ĐÃ hết hạn (job hrm:leave-carryover-expire đánh dấu)
+                // không được hồi sinh khi recompute chạy lại (seeder gọi hàm này).
+                $carryover = max(0.0, $carryover - (float) ($meta['carryover_expired'] ?? 0));
+
+                $total = $entitlement + $carryover;
+                $used = (float) ($existing->used_days ?? 0);
+                $remaining = $total - $used;
                 $meta['entitlement'] = $entitlement;
                 $meta['carryover'] = $carryover;
                 $meta['accrual_basis'] = 'annual_grant';
