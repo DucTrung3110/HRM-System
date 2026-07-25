@@ -223,10 +223,19 @@
     <BaseModal v-model="payslipOpen" :title="`Phiếu lương — ${payslip?.salary_detail?.employee?.full_name || ''}`" size="lg">
       <BaseSkeleton v-if="payslipLoading" type="block" />
       <div v-else-if="payslip" class="space-y-5">
-        <!-- Kỳ + trạng thái -->
+        <!-- Header kiểu ADMS: công ty + tiêu đề config + kỳ từ→đến -->
+        <div class="text-center border-b border-border pb-3">
+          <p class="font-bold">{{ payslip.legal_entity?.name || '' }}</p>
+          <p class="font-extrabold text-primary mt-0.5">{{ payslipConfig.title || 'PHIẾU LƯƠNG THÁNG' }} {{ payslip.salary_detail?.period?.period_code }}</p>
+          <p class="text-xs text-muted-foreground" v-if="payslip.salary_detail?.period?.start_date">
+            Từ {{ new Date(payslip.salary_detail.period.start_date).toLocaleDateString('vi-VN') }}
+            đến {{ new Date(payslip.salary_detail.period.end_date).toLocaleDateString('vi-VN') }}
+          </p>
+        </div>
         <div class="flex flex-wrap items-center gap-2 text-sm">
-          <span class="font-medium">Kỳ {{ payslip.salary_detail?.period?.period_code }}</span>
+          <span class="font-medium">{{ payslip.salary_detail?.employee?.full_name }}</span>
           <span class="text-muted-foreground">· Mã NV {{ payslip.salary_detail?.employee?.employee_code }}</span>
+          <span class="text-muted-foreground" v-if="payslipMeta.base_salary">· Lương cơ bản {{ formatMoney(payslipMeta.base_salary) }}</span>
           <span v-if="payslipMeta.engine" class="ml-auto text-xs text-muted-foreground">engine: {{ payslipMeta.engine }}</span>
         </div>
 
@@ -275,14 +284,23 @@
           <div><p class="text-[11px] text-muted-foreground">Người phụ thuộc</p><p class="font-semibold">{{ payslipMeta.dependents ?? 0 }}</p></div>
         </div>
 
+        <!-- Nền BHXH (config) -->
+        <div v-if="payslipConfig.show_insurance_base !== false && infoRow('INS_BASE')" class="flex justify-between text-xs text-muted-foreground px-1">
+          <span>Nền đóng BHXH (lương + phụ cấp tính chất lương)</span>
+          <span class="font-medium">{{ formatMoney(infoRow('INS_BASE').amount) }}</span>
+        </div>
+
         <!-- NET -->
         <div class="flex justify-between items-center p-4 rounded-xl bg-primary/10 border border-primary/20">
           <span class="font-bold">THỰC LĨNH (NET)</span>
           <span class="text-2xl font-extrabold text-primary">{{ formatMoney(payslip.salary_detail?.net_salary) }}</span>
         </div>
 
-        <!-- Chi phí DN (thu gọn) -->
-        <details v-if="employerRows.length" class="text-sm">
+        <!-- Lời cảm ơn custom theo công ty -->
+        <p v-if="payslipConfig.footer" class="text-center text-xs italic text-blue-600 dark:text-blue-400">{{ payslipConfig.footer }}</p>
+
+        <!-- Chi phí DN (config, mặc định ẩn) -->
+        <details v-if="employerRows.length && payslipConfig.show_employer_cost" class="text-sm">
           <summary class="cursor-pointer text-xs font-semibold text-muted-foreground hover:text-foreground">Chi phí doanh nghiệp đóng (BHXH/BHYT/BHTN) ▾</summary>
           <div class="mt-2 space-y-1.5 pl-2">
             <div v-for="b in employerRows" :key="b.item_code" class="flex justify-between py-0.5 text-muted-foreground">
@@ -394,6 +412,9 @@ const summaryMeta = computed(() => {
   return m || {};
 });
 const breakdowns = computed(() => payslip.value?.breakdowns || []);
+// Config phiếu lương theo công ty (Settings → payslip.*); INFO row theo mã.
+const payslipConfig = computed(() => payslip.value?.config || {});
+const infoRow = (code) => breakdowns.value.find(b => b.item_type === 'INFO' && b.item_code === code && Number(b.amount) > 0);
 const earningRows = computed(() => breakdowns.value.filter(b => b.item_type === 'EARNING' && Number(b.amount) > 0));
 const deductionRows = computed(() => breakdowns.value.filter(b => b.item_type === 'DEDUCTION' && Number(b.amount) > 0));
 const employerRows = computed(() => breakdowns.value.filter(b => b.item_type === 'EMPLOYER_COST' && Number(b.amount) > 0));

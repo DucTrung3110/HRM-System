@@ -66,6 +66,15 @@ class SettingsController extends Controller
                 // gộp ≤3 năm/lần) — đây là CHÍNH SÁCH nội quy từng công ty → config.
                 ['key' => 'leave.carryover_max_days', 'label' => 'Phép gộp: số ngày chuyển tối đa (0 = không giới hạn)', 'type' => 'int'],
                 ['key' => 'leave.carryover_deadline', 'label' => 'Phép gộp: hạn dùng phép năm cũ (MM-DD, vd 03-31)', 'type' => 'string'],
+                // Phiếu lương custom theo công ty (render ở FE, không ảnh hưởng cách tính).
+                ['key' => 'payslip.title', 'label' => 'Phiếu lương: tiêu đề (mặc định "PHIẾU LƯƠNG THÁNG")', 'type' => 'string'],
+                ['key' => 'payslip.footer', 'label' => 'Phiếu lương: lời cảm ơn cuối phiếu', 'type' => 'string'],
+                ['key' => 'payslip.show_allowance_detail', 'label' => 'Phiếu lương: liệt kê từng phụ cấp theo tên', 'type' => 'bool'],
+                ['key' => 'payslip.show_ot_detail', 'label' => 'Phiếu lương: tách tăng ca thường/CN/lễ/đêm', 'type' => 'bool'],
+                ['key' => 'payslip.show_insurance_base', 'label' => 'Phiếu lương: hiện nền đóng BHXH', 'type' => 'bool'],
+                ['key' => 'payslip.show_relief', 'label' => 'Phiếu lương: hiện giảm trừ gia cảnh', 'type' => 'bool'],
+                ['key' => 'payslip.show_work_days', 'label' => 'Phiếu lương: hiện số ngày công', 'type' => 'bool'],
+                ['key' => 'payslip.show_employer_cost', 'label' => 'Phiếu lương: hiện chi phí DN đóng (17.5/3/1%)', 'type' => 'bool'],
             ],
         ],
         'approval' => [

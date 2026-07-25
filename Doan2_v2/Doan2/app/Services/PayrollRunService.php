@@ -142,15 +142,18 @@ class PayrollRunService
                     ->where(function ($q) use ($periodStart) {
                         $q->whereNull('ea.expiry_date')->orWhere('ea.expiry_date', '>=', $periodStart);
                     })
-                    ->get(['ea.amount', 'a.is_insurable', 'a.is_taxable', 'a.meta as allowance_meta']);
+                    ->get(['ea.amount', 'a.allowance_name', 'a.is_insurable', 'a.is_taxable', 'a.meta as allowance_meta']);
 
                 $allowanceTotal = 0.0;
                 $insurableAllowance = 0.0;   // vào nền BHXH
                 $taxableAllowance = 0.0;     // vào thu nhập chịu thuế
                 $otBaseAllowance = 0.0;      // vào đơn giá giờ OT
+                $allowanceNamed = [];        // [tên => tiền] cho phiếu lương kiểu ADMS
                 foreach ($allowanceRows as $ar) {
                     $amt = (float) $ar->amount;
                     $allowanceTotal += $amt;
+                    $anm = trim((string) ($ar->allowance_name ?? '')) ?: 'Phụ cấp khác';
+                    $allowanceNamed[$anm] = ($allowanceNamed[$anm] ?? 0) + $amt;
                     // Không join được catalog (allowance_id null) → coi như taxable,
                     // không insurable (giữ hành vi cũ, không âm thầm tăng tiền đóng BH).
                     if (filter_var($ar->is_insurable ?? false, FILTER_VALIDATE_BOOLEAN)) {
@@ -244,6 +247,8 @@ class PayrollRunService
 
                 $overtimeHours = 0.0;      // tổng giờ OT thô (để hiển thị)
                 $weightedOtHours = 0.0;    // tổng giờ đã nhân hệ số (để tính tiền)
+                $otBuckets = [];           // [hệ số => giờ] tách thường/CN/lễ cho phiếu ADMS
+                $otNightHours = 0.0;       // giờ đêm hưởng phụ trội
                 foreach ($otRows as $ot) {
                     $h = (float) ($ot->total_hours ?? 0);
                     if ($h <= 0) {
@@ -260,9 +265,11 @@ class PayrollRunService
                     }
                     $overtimeHours += $h;
                     $weightedOtHours += $h * $factor;
+                    $otBuckets[(string) $factor] = ($otBuckets[(string) $factor] ?? 0) + $h;
                     $nightHours = (float) ($otMeta['night_hours'] ?? 0);
                     if ($nightHours > 0 && $nightPremium > 0) {
                         $weightedOtHours += min($nightHours, $h) * $nightPremium;
+                        $otNightHours += min($nightHours, $h);
                     }
                 }
 
@@ -420,24 +427,51 @@ class PayrollRunService
                     ]));
                 }
 
-                $this->writeBreakdowns($detailId, $tenantId, $legalEntityId, $now, [
+                // Phiếu lương kiểu ADMS: từng phụ cấp THEO TÊN + OT tách hệ số
+                // (thường 150%/CN 200%/lễ 300%) + các dòng INFO đối soát.
+                $lines = [
                     ['EARNING', 'BASE', 'Lương cơ bản (theo công)', $proratedBase],
-                    ['EARNING', 'ALLOWANCE', 'Phụ cấp', $proratedAllowance],
-                    ['EARNING', 'OVERTIME', 'Tăng ca', $overtimePay],
+                ];
+                foreach ($allowanceNamed as $anm => $aval) {
+                    $lines[] = ['EARNING', 'ALLOWANCE', $anm, round($aval * $prorationFactor, 4)];
+                }
+                if ($overtimePay > 0) {
+                    $otLabels = ['1.5' => 'Tăng ca ngày thường (150%)', '2' => 'Tăng ca Chủ nhật (200%)', '3' => 'Tăng ca ngày lễ (300%)'];
+                    $stdD = (float) ($attendance?->standard_days ?? 0) ?: 26.0;
+                    $hourly = ($baseSalary + $otBaseAllowance) / max(1.0, $stdD * (float) HrmConfig::get('payroll.standard_hours_per_day', 8));
+                    $bucketSum = 0.0;
+                    foreach ($otBuckets as $factorKey => $bh) {
+                        $label = $otLabels[$factorKey] ?? ('Tăng ca (hệ số '.$factorKey.')');
+                        $amt = round($bh * (float) $factorKey * $hourly, 4);
+                        $bucketSum += $amt;
+                        $lines[] = ['EARNING', 'OVERTIME', $label." — {$bh}h", $amt];
+                    }
+                    // Phần còn lại của overtimePay = phụ trội ca đêm (nếu có giờ đêm).
+                    $nightAmt = round($overtimePay - $bucketSum, 4);
+                    if ($otNightHours > 0 && $nightAmt > 0) {
+                        $lines[] = ['EARNING', 'OVERTIME', 'Phụ trội ca đêm ('.round($nightPremium * 100).'%) — '.$otNightHours.'h', $nightAmt];
+                    }
+                }
+                $lines = array_merge($lines, [
                     ['INFO', 'OT_EXEMPT', 'Phụ trội tăng ca (miễn thuế TNCN)', $otPremiumExempt ? $otPremiumPay : 0.0],
                     ['EARNING', 'PIECE_RATE', 'Công khoán sản phẩm', $pieceRatePay],
                     ['EARNING', 'BONUS', 'Thưởng / Lương tháng 13', $bonusTotal],
+                ]);
+                $this->writeBreakdowns($detailId, $tenantId, $legalEntityId, $now, array_merge($lines, [
                     ['DEDUCTION', 'INS_BHXH', 'BHXH (8%)', $empInsurance['bhxh']],
                     ['DEDUCTION', 'INS_BHYT', 'BHYT (1.5%)', $empInsurance['bhyt']],
                     ['DEDUCTION', 'INS_BHTN', 'BHTN (1%)', $empInsurance['bhtn']],
                     ['DEDUCTION', 'PIT', 'Thuế TNCN', $pit['tax']],
                     ['DEDUCTION', 'FIXED_DEDUCTION', 'Khấu trừ cố định', $fixedDeductions],
+                    ['INFO', 'INS_BASE', 'Nền đóng BHXH (lương + PC tính chất lương)', $insuranceBase],
+                    ['INFO', 'WORK_DAYS', 'Số ngày công thực tế (chuẩn '.(float) ($attendance?->standard_days ?? 26).')', (float) ($attendance?->actual_work_days ?? 0)],
+                    ['INFO', 'RELIEF', 'Giảm trừ gia cảnh ('.$dependentCount.' người phụ thuộc)', $relief],
                     ['INFO', 'TAXABLE_INCOME', 'Thu nhập chịu thuế', $taxableIncome],
                     ['NET', 'NET', 'Thực nhận', $net],
                     ['EMPLOYER_COST', 'ER_BHXH', 'BHXH (DN 17.5%)', $employerInsurance['bhxh']],
                     ['EMPLOYER_COST', 'ER_BHYT', 'BHYT (DN 3%)', $employerInsurance['bhyt']],
                     ['EMPLOYER_COST', 'ER_BHTN', 'BHTN (DN 1%)', $employerInsurance['bhtn']],
-                ]);
+                ]));
 
                 $totals['gross'] += $gross;
                 $totals['insurance'] += $empInsurance['total'];

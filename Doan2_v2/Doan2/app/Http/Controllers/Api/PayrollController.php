@@ -427,6 +427,17 @@ class PayrollController extends Controller
                 ->where('employee_id', $detail->employee_id)
                 ->where('period_id', $detail->period_id)
                 ->first(),
+            // Phiếu lương custom theo công ty — chỉnh trong Settings (payslip.*).
+            'config' => [
+                'title' => (string) \App\Support\HrmConfig::get('payslip.title', 'PHIẾU LƯƠNG THÁNG'),
+                'footer' => (string) \App\Support\HrmConfig::get('payslip.footer', 'Công ty xin chân thành cảm ơn toàn thể nhân viên! Đừng quên đối chiếu số tiền trong tài khoản của bạn.'),
+                'show_allowance_detail' => (bool) \App\Support\HrmConfig::get('payslip.show_allowance_detail', true),
+                'show_ot_detail' => (bool) \App\Support\HrmConfig::get('payslip.show_ot_detail', true),
+                'show_insurance_base' => (bool) \App\Support\HrmConfig::get('payslip.show_insurance_base', true),
+                'show_relief' => (bool) \App\Support\HrmConfig::get('payslip.show_relief', true),
+                'show_work_days' => (bool) \App\Support\HrmConfig::get('payslip.show_work_days', true),
+                'show_employer_cost' => (bool) \App\Support\HrmConfig::get('payslip.show_employer_cost', false),
+            ],
         ];
 
         return $this->ok($data, 'Payslip detail');
