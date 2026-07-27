@@ -165,15 +165,31 @@ class AuthController extends Controller
         $employee = DB::table('employees')->where('company_email', $payload['company_email'])->first();
 
         if ($employee) {
+            $token = Str::random(64);
             DB::table('password_reset_requests')->insert([
                 'employee_id' => $employee->id,
                 'company_email' => $payload['company_email'],
-                'token' => Str::random(64),
+                'token' => $token,
                 'expires_at' => now()->addHour(),
                 'tenant_id' => $employee->tenant_id ?? TenantContext::id(),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Gửi email đặt lại mật khẩu. Driver 'log' (dev) ghi vào laravel.log;
+            // production cấu hình SMTP là gửi thật — KHÔNG đổi code. try/catch để
+            // lỗi mail không làm hỏng phản hồi (vẫn trả thông báo trung lập).
+            $resetUrl = rtrim(env('FRONTEND_URL', 'http://localhost:5050'), '/').'/reset-password?token='.$token;
+            try {
+                \Illuminate\Support\Facades\Mail::raw(
+                    "Xin chào,\n\nCó yêu cầu đặt lại mật khẩu cho tài khoản {$payload['company_email']}.\n"
+                    ."Nhấn liên kết sau để đặt lại (hết hạn sau 1 giờ):\n{$resetUrl}\n\n"
+                    ."Nếu không phải bạn, hãy bỏ qua email này.\n\n— Hệ thống HRM",
+                    fn ($m) => $m->to($payload['company_email'])->subject('Đặt lại mật khẩu HRM')
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Gửi email reset password thất bại: '.$e->getMessage());
+            }
         }
 
         return response()->json([

@@ -40,6 +40,22 @@ class AttendanceController extends Controller
             $query->whereDate('work_date', '<=', $request->query('to'));
         }
 
+        // Lọc theo THÁNG (month + year): giới hạn work_date trong tháng đó. FE
+        // gửi month/year để chỉ lấy 1 tháng — trước đây backend bỏ qua nên FE phải
+        // tải TOÀN BỘ lịch sử (nhiều trang → chậm, tưởng lỗi khi công nhân nhiều
+        // bản ghi). year không kèm month → lọc cả năm.
+        $year = (int) $request->query('year', 0);
+        $month = (int) $request->query('month', 0);
+        if ($year >= 2000 && $year <= 2100) {
+            if ($month >= 1 && $month <= 12) {
+                $start = sprintf('%04d-%02d-01', $year, $month);
+                $end = date('Y-m-t', strtotime($start));
+                $query->whereBetween('work_date', [$start, $end]);
+            } else {
+                $query->whereBetween('work_date', ["{$year}-01-01", "{$year}-12-31"]);
+            }
+        }
+
         // Lọc các lượt cần xem xét (xác minh chống gian lận).
         if ($request->query('review') === 'needs_review') {
             $query->whereRaw("meta->>'review_status' = 'needs_review'");

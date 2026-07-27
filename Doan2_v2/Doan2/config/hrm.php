@@ -27,7 +27,7 @@ return [
 
     // Token cho endpoint nội bộ (máy chấm công bridge, job nền). Đọc qua config()
     // để hoạt động cả khi đã config:cache (env() trả null khi cache).
-    'internal_service_token' => env('INTERNAL_SERVICE_TOKEN', 'replace_with_internal_service_token'),
+    'internal_service_token' => env('INTERNAL_SERVICE_TOKEN'),
 
     /*
     |--------------------------------------------------------------------------

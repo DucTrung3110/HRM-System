@@ -17,6 +17,32 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RecruitmentController extends Controller
 {
+    public function publicPositions(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'tenant_code' => 'required|string|exists:tenants,code',
+        ]);
+        if ($validator->fails()) {
+            return $this->validationError($validator->errors()->toArray());
+        }
+
+        $tenantId = DB::table('tenants')
+            ->where('code', $request->input('tenant_code'))
+            ->where('status', 'ACTIVE')
+            ->value('id');
+        if (! $tenantId) {
+            return $this->notFound('Công ty không tồn tại hoặc đã ngừng hoạt động');
+        }
+
+        $positions = DB::table('recruitment_positions')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 'OPEN')
+            ->orderBy('position_name')
+            ->get(['id', 'position_name', 'employment_type', 'required_skills_json']);
+
+        return $this->ok($positions, 'Open recruitment positions');
+    }
+
     public function index(Request $request): JsonResponse
     {
         $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
@@ -53,6 +79,23 @@ class RecruitmentController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $publicTenantId = null;
+        if (! TenantContext::hasTenant()) {
+            $publicValidator = Validator::make($request->all(), [
+                'tenant_code' => 'required|string|exists:tenants,code',
+            ]);
+            if ($publicValidator->fails()) {
+                return $this->validationError($publicValidator->errors()->toArray());
+            }
+            $publicTenantId = DB::table('tenants')
+                ->where('code', $request->input('tenant_code'))
+                ->where('status', 'ACTIVE')
+                ->value('id');
+            if (! $publicTenantId) {
+                return $this->notFound('Công ty không tồn tại hoặc đã ngừng hoạt động');
+            }
+        }
+
         $validator = Validator::make($request->all(), [
             'full_name' => 'required|string|max:255',
             'email' => 'required|email',
@@ -66,9 +109,20 @@ class RecruitmentController extends Controller
             return $this->validationError($validator->errors()->toArray());
         }
 
+        $tenantId = TenantContext::hasTenant() ? TenantContext::id() : (int) $publicTenantId;
+        if ($request->filled('recruitment_position_id') && ! DB::table('recruitment_positions')
+            ->where('id', $request->input('recruitment_position_id'))
+            ->where('tenant_id', $tenantId)
+            ->exists()) {
+            return $this->validationError([
+                'recruitment_position_id' => ['Vị trí tuyển dụng không thuộc công ty đã chọn'],
+            ]);
+        }
+
         $columns = Schema::getColumnListing('recruitment_candidates');
         $data = collect($request->all())->only($columns)->toArray();
         $data['application_status'] = $data['application_status'] ?? 'PENDING';
+        $data['tenant_id'] = $tenantId;
         $data['created_at'] = now();
         $data['updated_at'] = now();
 
@@ -78,6 +132,7 @@ class RecruitmentController extends Controller
         if ($candidate->recruitment_position_id && Schema::hasTable('recruitment_ai_scoring_jobs')) {
             DB::table('recruitment_ai_scoring_jobs')->insert(TenantContext::stamp([
                 'candidate_id' => $candidate->id,
+                'tenant_id' => $tenantId,
                 'status' => 'PENDING',
                 'created_at' => now(),
                 'updated_at' => now(),

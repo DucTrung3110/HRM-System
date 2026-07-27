@@ -77,7 +77,7 @@ axiosClient.interceptors.response.use(
           if (parsedMeta && typeof parsedMeta === 'object' && !Array.isArray(parsedMeta)) {
             const excludeKeys = ['id', 'created_at', 'updated_at', 'status'];
             for (const key of Object.keys(parsedMeta)) {
-              if (!excludeKeys.includes(key)) {
+              if (!excludeKeys.includes(key) && !(key in item)) {
                 item[key] = parsedMeta[key];
               }
             }

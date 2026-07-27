@@ -124,13 +124,10 @@
         <BaseCard class="space-y-3">
           <h3 class="font-bold text-base text-foreground pb-2 border-b">3. Xuất Báo Cáo</h3>
           <div class="space-y-2">
-            <BaseButton class="w-full" @click="exportReport('excel')">
+            <BaseButton class="w-full" @click="exportReport">
               <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Xuất file Excel (.xlsx)
-            </BaseButton>
-            <BaseButton variant="outline" class="w-full" @click="exportReport('csv')">
               Xuất file CSV (.csv)
             </BaseButton>
           </div>
@@ -226,6 +223,7 @@ import { leaveService } from '../services/leaveService';
 import { salaryService } from '../services/salaryService';
 import { reportService } from '../services/reportService';
 import { useToast } from '../composables/useToast';
+import { downloadCsv } from '../utils/csv';
 
 const toast = useToast();
 const loading = ref(true);
@@ -296,6 +294,7 @@ const availableColumns = {
     { key: 'status', label: 'Trạng thái', type: 'status' }
   ],
   salaries: [
+    { key: 'period_code', label: 'Kỳ lương', type: 'text' },
     { key: 'employee_code', label: 'Mã nhân viên', type: 'text' },
     { key: 'full_name', label: 'Họ tên', type: 'text' },
     { key: 'department_name', label: 'Phòng ban', type: 'text' },
@@ -375,17 +374,10 @@ const loadSourceData = async () => {
       rawData.value = res?.data || res || [];
     } else if (sourceType.value === 'salaries') {
       const res = await salaryService.getAllSummaries().catch(() => []);
-      // Map salary summaries or mock
-      rawData.value = (res?.data || res || []).length > 0 ? (res?.data || res) : [
-        { id: 1, employee_code: 'NV001', full_name: 'Nguyễn Văn A', department_name: 'Phòng Phát triển phần mềm', basic_salary: 15000000, allowances: 2000000, net_salary: 17000000, pay_date: '2026-05-05', department_id: 1 },
-        { id: 2, employee_code: 'NV002', full_name: 'Trần Thị B', department_name: 'Phòng Nhân sự', basic_salary: 12000000, allowances: 1500000, net_salary: 13500000, pay_date: '2026-05-05', department_id: 2 }
-      ];
+      rawData.value = res?.data || res || [];
     } else if (sourceType.value === 'leaves') {
       const res = await leaveService.getAll().catch(() => []);
-      rawData.value = (res?.data || res || []).length > 0 ? (res?.data || res) : [
-        { id: 1, employee_code: 'NV001', full_name: 'Nguyễn Văn A', leave_type_name: 'Nghỉ phép năm', start_date: '2026-05-10', end_date: '2026-05-12', total_days: 3, status: 'Đã duyệt', department_id: 1 },
-        { id: 2, employee_code: 'NV002', full_name: 'Trần Thị B', leave_type_name: 'Nghỉ ốm', start_date: '2026-05-15', end_date: '2026-05-15', total_days: 1, status: 'Đã duyệt', department_id: 2 }
-      ];
+      rawData.value = res?.data || res || [];
     }
   } catch (err) {
     console.error('Error compiling report data:', err);
@@ -395,8 +387,8 @@ const loadSourceData = async () => {
   }
 };
 
-// Export report as downloadable CSV/Excel files client-side
-const exportReport = (format) => {
+// Export report as a UTF-8 CSV that opens cleanly in Excel.
+const exportReport = () => {
   if (filteredData.value.length === 0) {
     toast.error('Không có dữ liệu để xuất báo cáo');
     return;
@@ -411,22 +403,9 @@ const exportReport = (format) => {
     });
   });
 
-  // Assemble CSV text contents (UTF-8 BOM added for Excel compatibility)
-  const csvContent = "\uFEFF" + [headers.join(','), ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))].join('\n');
-  
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  
   const dateStr = new Date().toISOString().split('T')[0];
-  link.setAttribute('href', url);
-  link.setAttribute('download', `bao_cao_${sourceType.value}_${dateStr}.${format === 'excel' ? 'xlsx' : 'csv'}`);
-  link.style.visibility = 'hidden';
-  
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  toast.success(`Đã xuất báo cáo ${format.toUpperCase()} thành công!`);
+  downloadCsv([headers, ...rows], `bao_cao_${sourceType.value}_${dateStr}.csv`);
+  toast.success('Đã xuất báo cáo CSV thành công!');
 };
 
 onMounted(async () => {

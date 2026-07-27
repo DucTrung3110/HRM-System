@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -22,6 +24,7 @@ class AnalyticsController extends Controller
         // ── Employees ────────────────────────────────────────
         $employeesByStatus = DB::table('employees')
             ->when($tenantId !== null, fn ($q) => $q->where('employees.tenant_id', $tenantId))
+            ->where(fn ($q) => $q->whereNull('profile->system_account')->orWhere('profile->system_account', false))
             ->select('status', DB::raw('COUNT(*) AS count'))
             ->groupBy('status')
             ->pluck('count', 'status');
@@ -29,6 +32,7 @@ class AnalyticsController extends Controller
         $employeesByDepartment = DB::table('employees AS e')
             ->leftJoin('departments AS d', 'd.id', '=', 'e.department_id')
             ->when($tenantId !== null, fn ($q) => $q->where('e.tenant_id', $tenantId))
+            ->where(fn ($q) => $q->whereNull('e.profile->system_account')->orWhere('e.profile->system_account', false))
             ->select(
                 'e.department_id',
                 DB::raw("COALESCE(d.department_name, 'Chưa phân bổ') AS department_name"),
@@ -187,12 +191,12 @@ class AnalyticsController extends Controller
             $trendRows = DB::table('attendances')
                 ->when($tenantId !== null, fn ($q) => $q->where('attendances.tenant_id', $tenantId))
                 ->select(
-                    DB::raw($attendanceDateColumn . '::date AS d'),
+                    $attendanceDateColumn.' AS d',
                     'status',
                     DB::raw('COUNT(*) AS count')
                 )
                 ->whereBetween($attendanceDateColumn, [$from->toDateString(), today()->toDateString()])
-                ->groupBy(DB::raw($attendanceDateColumn . '::date'), 'status')
+                ->groupBy($attendanceDateColumn, 'status')
                 ->get();
 
             // Pre-fill 30 day buckets so the chart always has a continuous axis.
@@ -247,8 +251,8 @@ class AnalyticsController extends Controller
                 ->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))
                 ->whereIn('status', $approved)
                 ->whereBetween('work_date', [$otFrom->toDateString(), today()->toDateString()])
-                ->select(DB::raw('work_date::date AS d'), DB::raw('SUM(total_hours) AS hours'))
-                ->groupBy(DB::raw('work_date::date'))
+                ->select('work_date AS d', DB::raw('SUM(total_hours) AS hours'))
+                ->groupBy('work_date')
                 ->get()
                 ->keyBy(fn ($r) => (string) $r->d);
 
@@ -270,7 +274,7 @@ class AnalyticsController extends Controller
             if ($stageColumn !== null) {
                 $byStage = DB::table('recruitment_candidates')
                     ->when($tenantId !== null, fn ($q) => $q->where('recruitment_candidates.tenant_id', $tenantId))
-                    ->select($stageColumn . ' AS stage', DB::raw('COUNT(*) AS count'))
+                    ->select($stageColumn.' AS stage', DB::raw('COUNT(*) AS count'))
                     ->groupBy($stageColumn)
                     ->get()
                     ->mapWithKeys(static fn ($row) => [(string) ($row->stage ?? 'UNKNOWN') => (int) $row->count]);
@@ -295,7 +299,7 @@ class AnalyticsController extends Controller
         // ── Upcoming (birthdays / anniversaries / new hires) ─
         $upcoming = $this->upcoming($tenantId);
 
-        return $this->ok([
+        $data = [
             'employees' => $employees,
             'leave_requests' => $leaveRequests,
             'attendances_today' => $attendancesToday,
@@ -306,7 +310,28 @@ class AnalyticsController extends Controller
                 'expiring_within_30_days' => $contractsExpiringSoon,
             ],
             'upcoming' => $upcoming,
-        ], 'Dashboard statistics');
+        ];
+
+        // Do not merely hide unrelated cards in Vue: trim tenant-wide aggregates
+        // at the API boundary too, so a partial role cannot inspect the raw JSON.
+        $access = (array) $request->attributes->get('access', []);
+        if (empty($access['full'])) {
+            $modules = $access['modules'] ?? [];
+            if (! in_array('recruitment', $modules, true)) {
+                unset($data['recruitment']);
+            }
+            if (! in_array('hr', $modules, true)) {
+                unset($data['contracts'], $data['upcoming']);
+            }
+            if (! in_array('time', $modules, true)) {
+                unset($data['leave_requests'], $data['attendances_today'], $data['attendance_trend'], $data['overtime']);
+            }
+            if (! array_intersect(['hr', 'time'], $modules)) {
+                unset($data['employees']);
+            }
+        }
+
+        return $this->ok($data, 'Dashboard statistics');
     }
 
     /**
@@ -328,7 +353,8 @@ class AnalyticsController extends Controller
         $windowDays = 14;
 
         $base = static fn () => DB::table('employees AS e')
-            ->where('e.status', 'ACTIVE');
+            ->where('e.status', 'ACTIVE')
+            ->where(fn ($q) => $q->whereNull('e.profile->system_account')->orWhere('e.profile->system_account', false));
 
         // ── Birthdays ────────────────────────────────────────
         $birthdays = [];
@@ -422,7 +448,7 @@ class AnalyticsController extends Controller
      * Next calendar occurrence (>= today) of a given month/day, handling year wrap.
      * Feb 29 in a non-leap year falls back to Feb 28. Returns null on invalid input.
      */
-    private function nextOccurrence(\Illuminate\Support\Carbon $today, int $month, int $day): ?\Illuminate\Support\Carbon
+    private function nextOccurrence(Carbon $today, int $month, int $day): ?Carbon
     {
         if ($month < 1 || $month > 12 || $day < 1 || $day > 31) {
             return null;
@@ -434,7 +460,7 @@ class AnalyticsController extends Controller
                 // e.g. Feb 29 on a non-leap year -> clamp to last valid day of month.
                 $d = (int) $today->copy()->setDate($year, $month, 1)->endOfMonth()->day;
             }
-            $candidate = \Illuminate\Support\Carbon::create($year, $month, $d)->startOfDay();
+            $candidate = Carbon::create($year, $month, $d)->startOfDay();
             if ($candidate->greaterThanOrEqualTo($today->copy()->startOfDay())) {
                 return $candidate;
             }
@@ -458,7 +484,7 @@ class AnalyticsController extends Controller
         $supported = ['headcount', 'leave-summary', 'payroll-summary', 'attendance-summary', 'bhxh-declaration', 'pit-finalization'];
         if (! is_string($type) || ! in_array($type, $supported, true)) {
             return $this->validationError([
-                'type' => ['Unknown report type. Supported: ' . implode(', ', $supported)],
+                'type' => ['Unknown report type. Supported: '.implode(', ', $supported)],
             ]);
         }
 
@@ -467,7 +493,7 @@ class AnalyticsController extends Controller
             $periodId = $filters['period_id'] ?? null;
             if ($periodId === null || $periodId === '' || ! is_numeric($periodId)) {
                 return $this->validationError([
-                    'filters.period_id' => ['period_id is required for ' . $type . '.'],
+                    'filters.period_id' => ['period_id is required for '.$type.'.'],
                 ]);
             }
         }
@@ -503,13 +529,15 @@ class AnalyticsController extends Controller
 
     // ── Report builders ──────────────────────────────────────
 
-    private function headcountRows(): \Illuminate\Support\Collection
+    private function headcountRows(): Collection
     {
         $tenantId = TenantContext::hasTenant() ? TenantContext::id() : null;
 
         return DB::table('employees AS e')
             ->leftJoin('departments AS d', 'd.id', '=', 'e.department_id')
             ->when($tenantId !== null, fn ($q) => $q->where('e.tenant_id', $tenantId))
+            ->whereIn('e.status', ['ACTIVE', 'PROBATION'])
+            ->where(fn ($q) => $q->whereNull('e.profile->system_account')->orWhere('e.profile->system_account', false))
             ->select(
                 'e.department_id',
                 DB::raw("COALESCE(d.department_name, 'Chưa phân bổ') AS department_name"),
@@ -525,7 +553,7 @@ class AnalyticsController extends Controller
             ]);
     }
 
-    private function leaveSummaryRows(): \Illuminate\Support\Collection
+    private function leaveSummaryRows(): Collection
     {
         $hasLeaveTypes = Schema::hasTable('leave_types');
         $tenantId = TenantContext::hasTenant() ? TenantContext::id() : null;
@@ -557,7 +585,7 @@ class AnalyticsController extends Controller
         });
     }
 
-    private function payrollSummaryRows(): \Illuminate\Support\Collection
+    private function payrollSummaryRows(): Collection
     {
         if (! Schema::hasTable('salary_details')) {
             return collect();
@@ -598,7 +626,7 @@ class AnalyticsController extends Controller
         });
     }
 
-    private function attendanceSummaryRows(): \Illuminate\Support\Collection
+    private function attendanceSummaryRows(): Collection
     {
         if (! Schema::hasTable('attendances')) {
             return collect();
@@ -606,10 +634,12 @@ class AnalyticsController extends Controller
 
         $tenantId = TenantContext::hasTenant() ? TenantContext::id() : null;
 
+        $status = "CASE WHEN status IN ('PRESENT', 'CHECKED_IN', 'CHECKED_OUT', 'ĐÃ_DUYỆT', 'ĐÃ DUYỆT') THEN 'ON_TIME' ELSE status END";
+
         return DB::table('attendances')
             ->when($tenantId !== null, fn ($q) => $q->where('attendances.tenant_id', $tenantId))
-            ->select('status', DB::raw('COUNT(*) AS count'))
-            ->groupBy('status')
+            ->selectRaw("{$status} AS status, COUNT(*) AS count")
+            ->groupByRaw($status)
             ->get()
             ->map(static fn ($row) => [
                 'status' => $row->status,

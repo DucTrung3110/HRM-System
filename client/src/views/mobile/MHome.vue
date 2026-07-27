@@ -134,7 +134,10 @@ const actions = [
 onMounted(async () => {
   if (!empId) return;
   // 3 nguồn độc lập — lỗi nguồn nào bỏ nguồn đó, không chặn màn hình.
-  attendanceService.getRecords({ employee_id: empId, per_page: 200 })
+  // Chỉ lấy THÁNG HIỆN TẠI (backend lọc month/year) — tránh tải toàn bộ lịch sử
+  // nhiều trang khi công nhân có hàng trăm bản ghi (chậm, tưởng lỗi).
+  const _now = new Date();
+  attendanceService.getRecords({ employee_id: empId, month: _now.getMonth() + 1, year: _now.getFullYear(), per_page: 200 })
     .then(d => { records.value = Array.isArray(d) ? d : (d?.items || []); }).catch(() => {});
   leaveService.getRequests({ employee_id: empId })
     .then(d => { requests.value = Array.isArray(d) ? d : (d?.items || []); }).catch(() => {});

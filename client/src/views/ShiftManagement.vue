@@ -103,6 +103,7 @@
       <BaseCard>
         <div class="flex flex-wrap items-center gap-4 text-xs">
           <span class="font-bold text-muted-foreground uppercase tracking-wider">Ký hiệu ca:</span>
+          <span v-if="!rosterShiftTypes.length" class="text-amber-600">Chưa cấu hình loại ca làm việc</span>
           <div v-for="shift in rosterShiftTypes" :key="shift.id" class="flex items-center gap-1.5">
             <span
               class="w-3.5 h-3.5 rounded-md border border-border"
@@ -470,13 +471,6 @@ const showAssignModal = ref(false);
 const activeAssignment = ref(null);
 const selectedShiftId = ref(null);
 
-const defaultShiftTypes = [
-  { id: 1, shift_code: 'HC', shift_name: 'Hành chính', start_time: '08:00:00', end_time: '17:00:00', color_code: '#3b82f6' },
-  { id: 2, shift_code: 'SA', shift_name: 'Ca Sáng', start_time: '06:00:00', end_time: '14:00:00', color_code: '#10b981' },
-  { id: 3, shift_code: 'CH', shift_name: 'Ca Chiều', start_time: '14:00:00', end_time: '22:00:00', color_code: '#f59e0b' },
-  { id: 4, shift_code: 'DE', shift_name: 'Ca Đêm', start_time: '22:00:00', end_time: '06:00:00', color_code: '#6366f1' },
-];
-
 const weekDays = computed(() => {
   const start = new Date(currentStartDate.value);
   const day = start.getDay();
@@ -664,16 +658,16 @@ const loadRosterShiftTypes = async () => {
   try {
     const res = await workShiftService.getAll().catch(() => []);
     const shifts = res?.data || res || [];
-    rosterShiftTypes.value = shifts && shifts.length > 0 ? shifts : defaultShiftTypes;
+    rosterShiftTypes.value = Array.isArray(shifts) ? shifts : [];
   } catch (err) {
     console.error('Error loading roster shift types:', err);
-    rosterShiftTypes.value = defaultShiftTypes;
+    rosterShiftTypes.value = [];
   }
 };
 
 const loadEmployees = async () => {
   try {
-    const employeesRes = await employeeService.getAll();
+    const employeesRes = await employeeService.getLookup();
     let emps = employeesRes?.data || employeesRes || [];
     if (!Array.isArray(emps)) {
       emps = emps.items || emps.data || [];

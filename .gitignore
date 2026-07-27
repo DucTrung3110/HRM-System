@@ -31,3 +31,4 @@ stats_resp.json
 
 # Word lock files
 ~$*.docx
+backups/

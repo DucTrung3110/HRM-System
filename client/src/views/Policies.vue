@@ -154,7 +154,7 @@ import { useToast } from '../composables/useToast';
 const toast = useToast();
 const policies = ref([]);
 // isAdmin theo authService (user_role); user.is_admin không tồn tại trên employee.
-const isAdmin = computed(() => authService.isAdmin());
+const isAdmin = computed(() => authService.canAccessModule('communications'));
 
 const showReadModal = ref(false);
 const showCreateModal = ref(false);

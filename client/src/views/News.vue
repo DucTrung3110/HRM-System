@@ -130,7 +130,7 @@ const toast = useToast();
 const newsList = ref([]);
 // isAdmin phải theo authService (user_role) — user.is_admin KHÔNG tồn tại trên
 // bản ghi employee (chỉ có is_super_admin) nên admin không bao giờ thấy nút quản lý.
-const isAdmin = computed(() => authService.isAdmin());
+const isAdmin = computed(() => authService.canAccessModule('communications'));
 
 const showReadModal = ref(false);
 const showEditModal = ref(false);

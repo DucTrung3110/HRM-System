@@ -85,7 +85,10 @@ const monthRecords = computed(() => {
 const load = async () => {
   if (!empId) return;
   try {
-    const d = await attendanceService.getRecords({ employee_id: empId, per_page: 200 });
+    // Chỉ tháng hiện tại (backend lọc) — màn này hiển thị "Tháng này", không cần
+    // tải toàn bộ lịch sử nhiều trang.
+    const _now = new Date();
+    const d = await attendanceService.getRecords({ employee_id: empId, month: _now.getMonth() + 1, year: _now.getFullYear(), per_page: 200 });
     records.value = Array.isArray(d) ? d : (d?.items || []);
   } catch { /* giữ list cũ */ }
 };

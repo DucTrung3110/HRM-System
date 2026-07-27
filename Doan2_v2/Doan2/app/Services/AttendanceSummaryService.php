@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Support\TenantContext;
 use App\Support\TimePolicy;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -70,9 +71,9 @@ class AttendanceSummaryService
         $standardDays = TimePolicy::standardWorkingDays($start, $end);
 
         // Calendar days inclusive — non-working days bucket (weekends + holidays).
-        $calendarDays = (int) (\Carbon\CarbonImmutable::parse($start)
+        $calendarDays = (int) (CarbonImmutable::parse($start)
             ->startOfDay()
-            ->diffInDays(\Carbon\CarbonImmutable::parse($end)->startOfDay()) + 1);
+            ->diffInDays(CarbonImmutable::parse($end)->startOfDay()) + 1);
         $holidayDays = max(0, $calendarDays - $standardDays);
 
         // Nhân viên đang làm (chính thức + thử việc), loại tài khoản hệ thống.
@@ -80,7 +81,8 @@ class AttendanceSummaryService
             ->where('tenant_id', $tenantId)
             ->where('legal_entity_id', $legalEntityId)
             ->whereIn('status', ['ACTIVE', 'PROBATION'])
-            ->whereRaw("COALESCE((profile->>'system_account')::boolean, false) = false")
+            ->where(fn ($query) => $query->whereNull('hire_date')->orWhere('hire_date', '<=', $end))
+            ->where(fn ($query) => $query->whereNull('profile->system_account')->orWhere('profile->system_account', false))
             ->pluck('id')
             ->all();
 
@@ -157,29 +159,38 @@ class AttendanceSummaryService
      */
     private function attendanceAggregate(int $employeeId, string $start, string $end, int $tenantId, int $legalEntityId): array
     {
-        $row = DB::table('attendances')
+        $rows = DB::table('attendances')
             ->where('tenant_id', $tenantId)
             ->where('legal_entity_id', $legalEntityId)
             ->where('employee_id', $employeeId)
             ->whereBetween('work_date', [$start, $end])
-            ->selectRaw("
-                COUNT(*) FILTER (WHERE status = 'ON_TIME') AS on_time_days,
-                COUNT(*) FILTER (WHERE status = 'LATE') AS late_days,
-                COUNT(*) FILTER (WHERE status = 'EARLY_LEAVE') AS early_leave_days,
-                COUNT(*) FILTER (WHERE status = 'ABSENT') AS absent_days,
-                COALESCE(SUM((meta->>'late_minutes')::numeric) FILTER (WHERE status = 'LATE'), 0) AS late_minutes,
-                COALESCE(SUM((meta->>'early_leave_minutes')::numeric), 0) AS early_leave_minutes
-            ")
-            ->first();
+            ->get(['status', 'meta']);
 
-        return [
-            'on_time_days' => (int) ($row->on_time_days ?? 0),
-            'late_days' => (int) ($row->late_days ?? 0),
-            'early_leave_days' => (int) ($row->early_leave_days ?? 0),
-            'absent_days' => (int) ($row->absent_days ?? 0),
-            'late_minutes' => (float) ($row->late_minutes ?? 0),
-            'early_leave_minutes' => (float) ($row->early_leave_minutes ?? 0),
+        $totals = [
+            'on_time_days' => 0,
+            'late_days' => 0,
+            'early_leave_days' => 0,
+            'absent_days' => 0,
+            'late_minutes' => 0.0,
+            'early_leave_minutes' => 0.0,
         ];
+        foreach ($rows as $row) {
+            $status = strtoupper((string) $row->status);
+            if (in_array($status, ['ON_TIME', 'PRESENT', 'CHECKED_IN', 'CHECKED_OUT', 'ĐÃ_DUYỆT', 'ĐÃ DUYỆT'], true)) {
+                $totals['on_time_days']++;
+            } elseif ($status === 'LATE') {
+                $totals['late_days']++;
+            } elseif ($status === 'EARLY_LEAVE') {
+                $totals['early_leave_days']++;
+            } elseif ($status === 'ABSENT') {
+                $totals['absent_days']++;
+            }
+            $meta = is_string($row->meta) ? (json_decode($row->meta, true) ?: []) : (array) ($row->meta ?? []);
+            $totals['late_minutes'] += (float) ($meta['late_minutes'] ?? 0);
+            $totals['early_leave_minutes'] += (float) ($meta['early_leave_minutes'] ?? 0);
+        }
+
+        return $totals;
     }
 
     /**
@@ -193,7 +204,7 @@ class AttendanceSummaryService
             ->whereIn('status', self::APPROVED_STATUSES)
             ->whereBetween('work_date', [$start, $end])
             // OT đã quy đổi NGHỈ BÙ thì không trả tiền (tránh hưởng kép).
-            ->whereRaw("COALESCE((meta->>'converted_to_comp_off')::boolean, false) = false")
+            ->where(fn ($query) => $query->whereNull('meta->converted_to_comp_off')->orWhere('meta->converted_to_comp_off', false))
             ->sum('total_hours');
     }
 
@@ -205,33 +216,38 @@ class AttendanceSummaryService
      * [start_date,end_date] với kỳ), tránh cộng full total_days vào cả hai kỳ.
      *
      * @return array{paid: float, unpaid: float}
-     * ponytail: UNPAID theo category; nghỉ thai sản (BHXH chi trả) vẫn tính 'paid'
-     * ở đây — tách riêng khi cần trừ lương công ty cho ngày thai sản.
+     *                                           ponytail: UNPAID theo category; nghỉ thai sản (BHXH chi trả) vẫn tính 'paid'
+     *                                           ở đây — tách riêng khi cần trừ lương công ty cho ngày thai sản.
      */
     private function leaveDays(int $employeeId, string $start, string $end, int $tenantId): array
     {
-        $r = DB::selectOne(
-            "SELECT
-                COALESCE(SUM(CASE WHEN UPPER(lt.category) NOT IN ('UNPAID','WORK') THEN d END), 0) AS paid,
-                COALESCE(SUM(CASE WHEN UPPER(lt.category) = 'UNPAID' THEN d END), 0) AS unpaid,
-                COALESCE(SUM(CASE WHEN UPPER(lt.category) = 'WORK' THEN d END), 0) AS work
-             FROM (
-                SELECT lr.leave_type_id,
-                       LEAST(lr.total_days, (LEAST(lr.end_date, ?::date) - GREATEST(lr.start_date, ?::date) + 1)) AS d
-                FROM leave_requests lr
-                WHERE lr.tenant_id = ? AND lr.employee_id = ?
-                  AND lr.status IN (?, ?) AND lr.start_date <= ?::date AND lr.end_date >= ?::date
-             ) x
-             JOIN leave_types lt ON lt.id = x.leave_type_id",
-            [$end, $start, $tenantId, $employeeId,
-             self::APPROVED_STATUSES[0], self::APPROVED_STATUSES[1], $end, $start]
-        );
+        $rows = DB::table('leave_requests as lr')
+            ->join('leave_types as lt', 'lt.id', '=', 'lr.leave_type_id')
+            ->where('lr.tenant_id', $tenantId)
+            ->where('lr.employee_id', $employeeId)
+            ->whereIn('lr.status', self::APPROVED_STATUSES)
+            ->where('lr.start_date', '<=', $end)
+            ->where('lr.end_date', '>=', $start)
+            ->get(['lr.start_date', 'lr.end_date', 'lr.total_days', 'lt.category']);
+
+        $totals = ['paid' => 0.0, 'unpaid' => 0.0, 'work' => 0.0];
+        $periodStart = CarbonImmutable::parse($start);
+        $periodEnd = CarbonImmutable::parse($end);
+        foreach ($rows as $row) {
+            $leaveStart = CarbonImmutable::parse($row->start_date);
+            $leaveEnd = CarbonImmutable::parse($row->end_date);
+            $overlapStart = $leaveStart->gt($periodStart) ? $leaveStart : $periodStart;
+            $overlapEnd = $leaveEnd->lt($periodEnd) ? $leaveEnd : $periodEnd;
+            $days = min((float) $row->total_days, (float) ($overlapStart->diffInDays($overlapEnd) + 1));
+            $category = strtoupper((string) $row->category);
+            $totals[$category === 'UNPAID' ? 'unpaid' : ($category === 'WORK' ? 'work' : 'paid')] += $days;
+        }
 
         return [
-            'paid' => (float) ($r->paid ?? 0),
-            'unpaid' => (float) ($r->unpaid ?? 0),
+            'paid' => $totals['paid'],
+            'unpaid' => $totals['unpaid'],
             // WFH / công tác đã duyệt → tính là NGÀY LÀM VIỆC (không phải nghỉ).
-            'work' => (float) ($r->work ?? 0),
+            'work' => $totals['work'],
         ];
     }
 }

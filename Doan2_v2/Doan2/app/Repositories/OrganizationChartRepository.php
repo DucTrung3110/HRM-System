@@ -151,6 +151,24 @@ class OrganizationChartRepository
     {
         $flatList = $this->getTree($rootEmployeeId);
 
+        // Sơ đồ tổ chức = cây QUẢN LÝ + văn phòng. KHÔNG nhồi công nhân sản xuất
+        // (số lượng lớn làm rối, mất ý nghĩa quản trị). Loại các chức danh trong
+        // org_chart.exclude_positions (mặc định 'CN' = Công nhân) — chỉ ở bản VẼ này;
+        // getTree (phạm vi duyệt đơn, kiểm vòng lặp) vẫn giữ đủ mọi người.
+        $excludeCodes = (array) \App\Support\HrmConfig::get('org_chart.exclude_positions', ['CN']);
+        if (! empty($excludeCodes)) {
+            $tenantId = TenantContext::hasTenant() ? TenantContext::id() : null;
+            $excludedIds = DB::table('positions')
+                ->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))
+                ->whereIn('position_code', $excludeCodes)
+                ->pluck('id')->map(fn ($id) => (int) $id)->all();
+            if (! empty($excludedIds)) {
+                $flatList = $flatList
+                    ->reject(fn ($e) => in_array((int) $e->position_id, $excludedIds, true))
+                    ->values();
+            }
+        }
+
         // Kiêm nhiệm (matrix / dotted-line): với mỗi nhân viên trong cây, lấy các
         // phòng ban PHỤ từ pivot employee_departments. Chỉ 1 query bulk (tránh N+1),
         // group theo employee_id rồi đính vào từng node để FE vẽ đường nét đứt.
