@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\PieceRateController;
 use App\Http\Controllers\Api\PlatformController;
 use App\Http\Controllers\Api\ProfileChangeRequestController;
 use App\Http\Controllers\Api\RecruitmentController;
+use App\Http\Controllers\Api\PersonnelDecisionController;
 use App\Http\Controllers\Api\RequestApprovalController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShiftCoverageController;
@@ -158,6 +159,11 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/employees', [EmployeeController::class, 'index']);
         Route::post('/employees', [EmployeeController::class, 'store']);
         Route::post('/employees/import', [EmployeeController::class, 'import']);
+        // Quyết định nhân sự: đề xuất → duyệt (khác người đề xuất) → mới áp dụng.
+        Route::get('/personnel-decisions', [PersonnelDecisionController::class, 'index']);
+        Route::post('/personnel-decisions', [PersonnelDecisionController::class, 'store']);
+        Route::post('/personnel-decisions/{id}/approve', [PersonnelDecisionController::class, 'approve'])->whereNumber('id');
+        Route::post('/personnel-decisions/{id}/reject', [PersonnelDecisionController::class, 'reject'])->whereNumber('id');
         Route::get('/employees/{id}', [EmployeeController::class, 'show'])->whereNumber('id');
         Route::put('/employees/{id}', [EmployeeController::class, 'update'])->whereNumber('id');
         Route::patch('/employees/{id}', [EmployeeController::class, 'update'])->whereNumber('id');
@@ -321,6 +327,10 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/requests/{id}/approve', [RequestApprovalController::class, 'approve'])->whereNumber('id');
         Route::post('/requests/{id}/reject', [RequestApprovalController::class, 'reject'])->whereNumber('id');
         Route::post('/requests/{id}/cancel', [RequestApprovalController::class, 'cancel'])->whereNumber('id');
+        // Chứng từ đính kèm đơn (giấy bác sĩ, đăng ký kết hôn, vé xe công tác…).
+        Route::get('/requests/{id}/attachments', [RequestApprovalController::class, 'attachments'])->whereNumber('id');
+        Route::post('/requests/{id}/attachments', [RequestApprovalController::class, 'uploadAttachment'])->whereNumber('id');
+        Route::get('/requests/{id}/attachments/{attachmentId}', [RequestApprovalController::class, 'downloadAttachment'])->whereNumber('id')->whereNumber('attachmentId');
 
         // ─── Policies (special actions, CRUD via generic) ─
         Route::post('/policies/{id}/acknowledge', [GenericResourceController::class, 'update'])->defaults('resource', 'policies')->defaults('child', 'acknowledge');

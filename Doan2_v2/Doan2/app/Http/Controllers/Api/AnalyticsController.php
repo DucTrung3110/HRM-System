@@ -777,6 +777,26 @@ class AnalyticsController extends Controller
         $newHire = (int) $emp()->whereBetween('e.hire_date', [$fromS, $toS])->count();
         $add('Nhân lực', 'Tuyển mới trong kỳ', $newHire, 'người', '');
 
+        // Biến động & tỷ lệ nghỉ việc — mở khoá nhờ quyết định thôi việc ghi
+        // profile->termination_date (PersonnelDecisionController).
+        $leavers = (int) DB::table('employees')
+            ->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))
+            ->whereRaw("profile->>'termination_date' BETWEEN ? AND ?", [$fromS, $toS])
+            ->count();
+        $avgHeadcount = $total + $leavers / 2;   // xấp xỉ headcount bình quân kỳ
+        $add('Nhân lực', 'Nghỉ việc trong kỳ', $leavers, 'người', 'Theo quyết định chấm dứt HĐ đã duyệt');
+        $add('Nhân lực', 'Tỷ lệ nghỉ việc (turnover)', $pct($leavers, max(1, (int) round($avgHeadcount))), '%',
+            'Tham chiếu ngành sản xuất VN: 2–4%/tháng là bình thường');
+        $earlyLeavers = (int) DB::table('employees')
+            ->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))
+            ->whereRaw("profile->>'termination_date' BETWEEN ? AND ?", [$fromS, $toS])
+            ->whereRaw("(profile->>'termination_date')::date - hire_date < 90")
+            ->count();
+        if ($leavers > 0) {
+            $add('Nhân lực', 'Nghỉ trong 90 ngày đầu', $pct($earlyLeavers, $leavers), '%',
+                'Cao → chất lượng tuyển dụng hoặc hội nhập có vấn đề');
+        }
+
         // ── 2. Chấm công (chỉ số kỷ luật lao động) ──
         if (Schema::hasTable('attendances')) {
             $att = fn () => DB::table('attendances AS a')
@@ -860,10 +880,6 @@ class AnalyticsController extends Controller
                     'Gồm chứng chỉ an toàn lao động (NĐ 44/2016)');
             }
         }
-
-        // ── 6. Chỉ số CHƯA tính được (nói thẳng thay vì bỏ trống) ──
-        $add('Chưa đo được', 'Tỷ lệ nghỉ việc (turnover)', 'N/A', '%',
-            'Cần bổ sung ngày chấm dứt + lý do nghỉ vào luồng nghỉ việc');
 
         return $rows;
     }

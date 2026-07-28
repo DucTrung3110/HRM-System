@@ -38,6 +38,7 @@ class AccessControl
         'employees' => 'hr', 'organization' => 'hr', 'departments' => 'hr',
         'contracts' => 'hr', 'contract-types' => 'hr', 'contract-templates' => 'hr',
         'contract-change-logs' => 'hr', 'contract-histories' => 'hr',
+        'personnel-decisions' => 'hr',   // quyết định nhân sự: tăng lương/điều chuyển/thôi việc
         'employment-histories' => 'hr', 'dependents' => 'hr',
         'onboarding-checklists' => 'hr', 'profile-change-requests' => 'hr',
         'asset-assignments' => 'hr', 'asset-categories' => 'hr',
