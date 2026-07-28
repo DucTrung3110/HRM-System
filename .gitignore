@@ -29,6 +29,20 @@ stats_resp.json
 .agents/
 ..agents/
 
-# Word lock files
+# Word/Excel lock files
 ~$*.docx
+~$*.xlsx
+~$*.pptx
 backups/
+
+# Script debug tự chế ở gốc Laravel (test_*.php bootstrap app rồi dump ra màn hình).
+# Kiểm thử thật nằm ở tests/Feature — đừng commit script chạy tay.
+Doan2_v2/Doan2/test_*.php
+
+# Tệp người dùng upload lúc chạy (CV ứng viên, chứng từ đính kèm đơn)
+Doan2_v2/Doan2/storage/app/candidate-cvs/
+Doan2_v2/Doan2/storage/app/request-attachments/
+
+# Kết xuất tạm khi chạy báo cáo/đối soát
+*.csv.tmp
+qa*.pdf
