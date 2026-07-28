@@ -481,7 +481,9 @@ class AnalyticsController extends Controller
             $filters = [];
         }
 
-        $supported = ['headcount', 'leave-summary', 'payroll-summary', 'attendance-summary', 'bhxh-declaration', 'pit-finalization'];
+        $supported = ['headcount', 'leave-summary', 'payroll-summary', 'attendance-summary',
+            'bhxh-declaration', 'pit-finalization',
+            'workforce-structure', 'leave-liability', 'labor-cost'];
         if (! is_string($type) || ! in_array($type, $supported, true)) {
             return $this->validationError([
                 'type' => ['Unknown report type. Supported: '.implode(', ', $supported)],
@@ -489,7 +491,7 @@ class AnalyticsController extends Controller
         }
 
         // Period-scoped VN compliance reports require a period_id filter.
-        if (in_array($type, ['bhxh-declaration', 'pit-finalization'], true)) {
+        if (in_array($type, ['bhxh-declaration', 'pit-finalization', 'labor-cost'], true)) {
             $periodId = $filters['period_id'] ?? null;
             if ($periodId === null || $periodId === '' || ! is_numeric($periodId)) {
                 return $this->validationError([
@@ -505,6 +507,9 @@ class AnalyticsController extends Controller
             'attendance-summary' => $this->attendanceSummaryRows(),
             'bhxh-declaration' => $this->bhxhDeclarationRows($filters),
             'pit-finalization' => $this->pitFinalizationRows($filters),
+            'workforce-structure' => $this->workforceStructureRows(),
+            'leave-liability' => $this->leaveLiabilityRows(),
+            'labor-cost' => $this->laborCostRows($filters),
         };
 
         $authEmployeeId = $request->attributes->get('auth_employee_id');
@@ -645,6 +650,159 @@ class AnalyticsController extends Controller
                 'status' => $row->status,
                 'count' => (int) $row->count,
             ]);
+    }
+
+    /**
+     * Cơ cấu lao động — nền cho "Báo cáo tình hình sử dụng lao động" nộp Sở LĐ-TB&XH
+     * (Mẫu 01/PLI, Nghị định 145/2020): chia theo giới tính, nhóm tuổi, thâm niên,
+     * trình độ và loại hợp đồng. Mỗi dòng = 1 tiêu chí + 1 giá trị + số người + tỷ lệ.
+     */
+    private function workforceStructureRows(): Collection
+    {
+        $tenantId = TenantContext::hasTenant() ? TenantContext::id() : null;
+        $base = fn () => DB::table('employees AS e')
+            ->when($tenantId !== null, fn ($q) => $q->where('e.tenant_id', $tenantId))
+            ->whereIn('e.status', ['ACTIVE', 'PROBATION']);
+
+        $total = (int) $base()->count();
+        if ($total === 0) {
+            return collect();
+        }
+
+        $rows = collect();
+        $push = function (string $dim, string $value, int $count) use (&$rows, $total) {
+            $rows->push([
+                'tieu_chi' => $dim,
+                'phan_loai' => $value,
+                'so_nguoi' => $count,
+                'ty_le_phan_tram' => round($count * 100 / max(1, $total), 1),
+            ]);
+        };
+
+        $push('Tổng số lao động', 'Đang làm việc', $total);
+
+        foreach ($base()->selectRaw("COALESCE(NULLIF(e.gender,''),'Chưa khai báo') g, COUNT(*) c")
+            ->groupBy('g')->orderByDesc('c')->get() as $r) {
+            $push('Giới tính', ['MALE' => 'Nam', 'FEMALE' => 'Nữ'][$r->g] ?? $r->g, (int) $r->c);
+        }
+
+        $ageBands = "CASE WHEN e.date_of_birth IS NULL THEN 'Chưa khai báo'
+            WHEN EXTRACT(YEAR FROM AGE(e.date_of_birth)) < 25 THEN 'Dưới 25'
+            WHEN EXTRACT(YEAR FROM AGE(e.date_of_birth)) < 35 THEN 'Từ 25 đến 34'
+            WHEN EXTRACT(YEAR FROM AGE(e.date_of_birth)) < 45 THEN 'Từ 35 đến 44'
+            WHEN EXTRACT(YEAR FROM AGE(e.date_of_birth)) < 55 THEN 'Từ 45 đến 54'
+            ELSE 'Từ 55 trở lên' END";
+        foreach ($base()->selectRaw("{$ageBands} b, COUNT(*) c")->groupByRaw($ageBands)->orderBy('b')->get() as $r) {
+            $push('Nhóm tuổi', $r->b, (int) $r->c);
+        }
+
+        $seniority = "CASE WHEN e.hire_date IS NULL THEN 'Chưa khai báo'
+            WHEN EXTRACT(YEAR FROM AGE(e.hire_date)) < 1 THEN 'Dưới 1 năm'
+            WHEN EXTRACT(YEAR FROM AGE(e.hire_date)) < 3 THEN 'Từ 1 đến 3 năm'
+            WHEN EXTRACT(YEAR FROM AGE(e.hire_date)) < 5 THEN 'Từ 3 đến 5 năm'
+            WHEN EXTRACT(YEAR FROM AGE(e.hire_date)) < 10 THEN 'Từ 5 đến 10 năm'
+            ELSE 'Trên 10 năm' END";
+        foreach ($base()->selectRaw("{$seniority} b, COUNT(*) c")->groupByRaw($seniority)->orderBy('b')->get() as $r) {
+            $push('Thâm niên', $r->b, (int) $r->c);
+        }
+
+        foreach ($base()->selectRaw("COALESCE(NULLIF(e.profile->>'education_level',''),'Chưa khai báo') b, COUNT(*) c")
+            ->groupByRaw("COALESCE(NULLIF(e.profile->>'education_level',''),'Chưa khai báo')")
+            ->orderByDesc('c')->get() as $r) {
+            $push('Trình độ', $r->b, (int) $r->c);
+        }
+
+        if (Schema::hasTable('contracts') && Schema::hasTable('contract_types')) {
+            foreach (DB::table('contracts AS c')
+                ->join('employees AS e', 'e.id', '=', 'c.employee_id')
+                ->leftJoin('contract_types AS ct', 'ct.id', '=', 'c.contract_type_id')
+                ->when($tenantId !== null, fn ($q) => $q->where('c.tenant_id', $tenantId))
+                ->whereIn('c.status', ['ACTIVE', 'CÓ_HIỆU_LỰC', 'ĐANG_HIỆU_LỰC'])
+                ->whereIn('e.status', ['ACTIVE', 'PROBATION'])
+                ->selectRaw("COALESCE(ct.contract_type_name, 'Chưa phân loại') b, COUNT(*) c")
+                ->groupByRaw('COALESCE(ct.contract_type_name, \'Chưa phân loại\')')
+                ->orderByDesc('c')->get() as $r) {
+                $push('Loại hợp đồng', $r->b, (int) $r->c);
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Quỹ phép phải trả (leave liability) — số tiền doanh nghiệp đang "nợ" người lao
+     * động nếu họ nghỉ hết phép còn lại. Kế toán dùng để trích trước chi phí.
+     * Đơn giá ngày = lương cơ bản / số ngày công chuẩn (config payroll.standard_days).
+     */
+    private function leaveLiabilityRows(): Collection
+    {
+        if (! Schema::hasTable('leave_balances')) {
+            return collect();
+        }
+        $tenantId = TenantContext::hasTenant() ? TenantContext::id() : null;
+        $stdDays = max(1.0, (float) \App\Support\HrmConfig::get('payroll.standard_days', 26));
+
+        return DB::table('leave_balances AS lb')
+            ->join('employees AS e', 'e.id', '=', 'lb.employee_id')
+            ->leftJoin('departments AS d', 'd.id', '=', 'e.department_id')
+            ->when($tenantId !== null, fn ($q) => $q->where('lb.tenant_id', $tenantId))
+            ->where('lb.year', (string) now()->year)
+            ->whereIn('e.status', ['ACTIVE', 'PROBATION'])
+            ->selectRaw("COALESCE(d.department_name, 'Chưa phân bổ') AS phong_ban,
+                COUNT(DISTINCT e.id) AS so_nhan_vien,
+                COALESCE(SUM(lb.remaining_days), 0) AS tong_ngay_phep_con,
+                COALESCE(SUM(lb.remaining_days * COALESCE(e.base_salary, 0) / {$stdDays}), 0) AS tien_phai_tra")
+            ->groupByRaw("COALESCE(d.department_name, 'Chưa phân bổ')")
+            ->orderByDesc('tien_phai_tra')
+            ->get()
+            ->map(static fn ($r) => [
+                'phong_ban' => $r->phong_ban,
+                'so_nhan_vien' => (int) $r->so_nhan_vien,
+                'tong_ngay_phep_con' => round((float) $r->tong_ngay_phep_con, 1),
+                'tien_phai_tra' => round((float) $r->tien_phai_tra),
+            ]);
+    }
+
+    /**
+     * Chi phí lao động theo phòng ban cho 1 kỳ lương: quỹ lương (gross) + phần bảo
+     * hiểm DOANH NGHIỆP đóng (21,5%) = tổng chi phí thực của doanh nghiệp cho nhân sự.
+     * Nguồn: salary_details.gross_salary + meta->insurance_employer->total.
+     */
+    private function laborCostRows(array $filters): Collection
+    {
+        if (! Schema::hasTable('salary_details')) {
+            return collect();
+        }
+        $periodId = (int) ($filters['period_id'] ?? 0);
+        $tenantId = TenantContext::hasTenant() ? TenantContext::id() : null;
+
+        return DB::table('salary_details AS sd')
+            ->join('employees AS e', 'e.id', '=', 'sd.employee_id')
+            ->leftJoin('departments AS d', 'd.id', '=', 'e.department_id')
+            ->when($tenantId !== null, fn ($q) => $q->where('sd.tenant_id', $tenantId))
+            ->where('sd.period_id', $periodId)
+            ->selectRaw("COALESCE(d.department_name, 'Chưa phân bổ') AS phong_ban,
+                COUNT(*) AS so_nhan_vien,
+                COALESCE(SUM(sd.gross_salary), 0) AS quy_luong_gross,
+                COALESCE(SUM(sd.net_salary), 0) AS thuc_chi_cho_nv,
+                COALESCE(SUM((sd.meta->'insurance_employer'->>'total')::numeric), 0) AS bao_hiem_dn_dong")
+            ->groupByRaw("COALESCE(d.department_name, 'Chưa phân bổ')")
+            ->orderByDesc('quy_luong_gross')
+            ->get()
+            ->map(static function ($r) {
+                $gross = (float) $r->quy_luong_gross;
+                $er = (float) $r->bao_hiem_dn_dong;
+                $n = max(1, (int) $r->so_nhan_vien);
+
+                return [
+                    'phong_ban' => $r->phong_ban,
+                    'so_nhan_vien' => (int) $r->so_nhan_vien,
+                    'quy_luong_gross' => round($gross),
+                    'bao_hiem_dn_dong' => round($er),
+                    'tong_chi_phi' => round($gross + $er),
+                    'chi_phi_binh_quan' => round(($gross + $er) / $n),
+                ];
+            });
     }
 
     /**

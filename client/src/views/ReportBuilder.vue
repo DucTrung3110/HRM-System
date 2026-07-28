@@ -19,13 +19,28 @@
     <!-- Server-side report engine (primary) -->
     <div v-if="mode === 'server'" class="space-y-6">
       <BaseCard class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-        <div class="sm:col-span-2">
+        <div :class="needsPeriod ? '' : 'sm:col-span-2'">
           <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Loại báo cáo</label>
           <select
             v-model="serverType"
+            data-testid="select-report-type"
             class="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option v-for="t in serverReportTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
+          </select>
+        </div>
+        <!-- Báo cáo theo kỳ (chi phí lao động, tờ khai BHXH, quyết toán thuế) -->
+        <div v-if="needsPeriod">
+          <label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Kỳ lương</label>
+          <select
+            v-model="serverPeriodId"
+            data-testid="select-report-period"
+            class="w-full px-3 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">— Chọn kỳ —</option>
+            <option v-for="p in salaryPeriods" :key="p.id" :value="p.id">
+              {{ p.period_code }}{{ p.legal_entity_name ? ' · ' + p.legal_entity_name : '' }}
+            </option>
           </select>
         </div>
         <BaseButton class="w-full" :disabled="serverLoading" @click="generateServerReport">
@@ -34,11 +49,24 @@
       </BaseCard>
 
       <BaseCard>
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h3 class="font-bold text-lg text-foreground">Kết Quả Báo Cáo</h3>
-          <span v-if="serverRows.length" class="text-xs font-semibold px-2.5 py-1 bg-primary/10 text-primary rounded-full">
-            Tổng số dòng: {{ serverRows.length }}
-          </span>
+          <div class="flex items-center gap-2">
+            <span v-if="serverRows.length" class="text-xs font-semibold px-2.5 py-1 bg-primary/10 text-primary rounded-full">
+              Tổng số dòng: {{ serverRows.length }}
+            </span>
+            <BaseButton v-if="serverRows.length" variant="outline" size="sm" data-testid="button-export-server-report" @click="exportServerReport">
+              ⬇ Xuất CSV
+            </BaseButton>
+          </div>
+        </div>
+
+        <!-- Dòng tổng cộng của tờ khai BHXH / quyết toán thuế -->
+        <div v-if="serverTotals" class="mb-4 p-3 rounded-xl bg-muted/50 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+          <div v-for="(v, k) in serverTotals" :key="k">
+            <p class="text-[11px] text-muted-foreground">{{ k }}</p>
+            <p class="font-semibold tabular-nums">{{ typeof v === 'number' ? v.toLocaleString('vi-VN') : v }}</p>
+          </div>
         </div>
 
         <div v-if="serverLoading" class="text-center py-12">
@@ -231,14 +259,25 @@ const loading = ref(true);
 // --- Server-side report engine (primary mode) ---
 const mode = ref('server');
 const serverReportTypes = [
-  { value: 'headcount', label: 'Thống kê nhân sự' },
+  { value: 'headcount', label: 'Thống kê nhân sự theo phòng ban' },
+  { value: 'workforce-structure', label: 'Cơ cấu lao động (giới tính / tuổi / thâm niên / trình độ / HĐ)' },
   { value: 'leave-summary', label: 'Tổng hợp nghỉ phép' },
+  { value: 'leave-liability', label: 'Quỹ phép phải trả (trích trước chi phí)' },
+  { value: 'attendance-summary', label: 'Tổng hợp chấm công' },
   { value: 'payroll-summary', label: 'Tổng hợp bảng lương' },
-  { value: 'attendance-summary', label: 'Tổng hợp chấm công' }
+  { value: 'labor-cost', label: 'Chi phí lao động theo phòng ban (cần chọn kỳ)' },
+  { value: 'bhxh-declaration', label: 'Tờ khai BHXH theo kỳ (cần chọn kỳ)' },
+  { value: 'pit-finalization', label: 'Quyết toán thuế TNCN theo kỳ (cần chọn kỳ)' },
 ];
+// Các báo cáo tính theo 1 kỳ lương → bắt buộc chọn kỳ trước khi tạo.
+const PERIOD_REPORTS = ['labor-cost', 'bhxh-declaration', 'pit-finalization'];
 const serverType = ref('headcount');
 const serverLoading = ref(false);
 const serverRows = ref([]);
+const salaryPeriods = ref([]);
+const serverPeriodId = ref('');
+const serverTotals = ref(null);   // dòng tổng cộng của tờ khai BHXH / quyết toán thuế
+const needsPeriod = computed(() => PERIOD_REPORTS.includes(serverType.value));
 
 // Derive table columns from the union of keys across returned rows
 const serverColumns = computed(() => {
@@ -254,11 +293,19 @@ const serverColumns = computed(() => {
 });
 
 const generateServerReport = async () => {
+  if (needsPeriod.value && !serverPeriodId.value) {
+    toast.error('Vui lòng chọn kỳ lương cho báo cáo này');
+    return;
+  }
   try {
     serverLoading.value = true;
     serverRows.value = [];
-    const res = await reportService.generate(serverType.value);
-    const rows = res?.rows || res?.data?.rows || [];
+    const filters = needsPeriod.value ? { period_id: Number(serverPeriodId.value) } : {};
+    const res = await reportService.generate(serverType.value, filters);
+    // BHXH / quyết toán thuế trả { rows: { rows: [...], totals: {...} } } — bóc thêm 1 lớp.
+    let rows = res?.rows ?? res?.data?.rows ?? [];
+    serverTotals.value = (!Array.isArray(rows) && rows?.totals) ? rows.totals : null;
+    if (!Array.isArray(rows)) rows = rows?.rows ?? [];
     serverRows.value = Array.isArray(rows) ? rows : [];
     if (serverRows.value.length === 0) {
       toast.success('Báo cáo đã được tạo nhưng không có dữ liệu');
@@ -271,6 +318,24 @@ const generateServerReport = async () => {
   } finally {
     serverLoading.value = false;
   }
+};
+
+// Xuất CSV cho báo cáo hệ thống (trước đây chỉ chế độ "tự thiết kế" mới xuất được).
+const exportServerReport = () => {
+  if (!serverRows.value.length) return;
+  const cols = serverColumns.value;
+  const rows = serverRows.value.map(r => cols.map(c => r?.[c] ?? ''));
+  const label = serverReportTypes.find(t => t.value === serverType.value)?.label || serverType.value;
+  const period = needsPeriod.value
+    ? (salaryPeriods.value.find(p => String(p.id) === String(serverPeriodId.value))?.period_code || '')
+    : '';
+  const head = [[label + (period ? ` — kỳ ${period}` : '')], ['Ngày xuất', new Date().toLocaleString('vi-VN')], []];
+  const foot = serverTotals.value
+    ? [[], ['TỔNG CỘNG'], ...Object.entries(serverTotals.value).map(([k, v]) => [k, v])]
+    : [];
+  downloadCsv([...head, cols, ...rows, ...foot],
+    `bao_cao_${serverType.value}${period ? '_' + period : ''}_${new Date().toISOString().slice(0, 10)}.csv`);
+  toast.success('Đã xuất báo cáo ra CSV');
 };
 
 const sourceType = ref('employees');
@@ -418,7 +483,15 @@ onMounted(async () => {
   } catch (err) {
     console.error('Error fetching departments:', err);
   }
-  
+
+  // Kỳ lương cho các báo cáo theo kỳ (chi phí lao động, BHXH, quyết toán thuế).
+  try {
+    const res = await salaryService.getPeriods({ per_page: 100 }).catch(() => []);
+    salaryPeriods.value = Array.isArray(res) ? res : (res?.items || res?.data || []);
+  } catch (err) {
+    console.error('Error fetching salary periods:', err);
+  }
+
   await loadSourceData();
 });
 </script>
