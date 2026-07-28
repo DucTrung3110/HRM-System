@@ -91,6 +91,12 @@ const routes = [
         meta: { title: 'Đơn đổi thông tin nhân sự', adminOnly: true }
       },
       {
+        path: 'personnel-decisions',
+        name: 'personnel-decisions',
+        component: () => import('../views/PersonnelDecisions.vue'),
+        meta: { title: 'Quyết định nhân sự', adminOnly: true }
+      },
+      {
         path: 'work-shifts',
         name: 'work-shifts',
         redirect: '/shifts',
@@ -347,6 +353,7 @@ router.beforeEach((to, from, next) => {
     const ROUTE_MODULE = [
       ['/employees', 'hr'], ['/organization-chart', 'hr'], ['/contracts', 'hr'], ['/onboarding', 'hr'],
       ['/employment-history', 'hr'], ['/profile-change-requests', 'hr'], ['/dependents', 'hr'], ['/departments', 'hr'],
+      ['/personnel-decisions', 'hr'],
       ['/assets', 'hr'], ['/asset-assignments', 'hr'],
       ['/attendance', 'time'], ['/timesheet', 'time'], ['/shifts', 'time'], ['/shift-roster', 'time'], ['/work-schedules', 'time'],
       ['/attendance-adjustments', 'time'], ['/leaves', 'time'],

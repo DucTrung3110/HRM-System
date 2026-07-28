@@ -204,6 +204,24 @@
           <p class="text-sm text-muted-foreground">Nội dung</p>
           <p class="font-medium mb-4">{{ selectedRequest.description || selectedRequest.content || 'Không có' }}</p>
         </div>
+        <!-- Chứng từ đính kèm: giấy bác sĩ (nghỉ ốm), ĐKKH (nghỉ cưới), vé xe (công tác)… -->
+        <div class="border-t border-border pt-4">
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm font-semibold text-foreground">Chứng từ đính kèm</p>
+            <label class="inline-flex items-center px-3 py-1.5 rounded-lg border border-input text-xs font-medium cursor-pointer hover:bg-muted">
+              {{ uploadingAttachment ? 'Đang tải lên…' : '+ Đính kèm tệp' }}
+              <input type="file" class="hidden" :disabled="uploadingAttachment" @change="uploadAttachment" />
+            </label>
+          </div>
+          <p v-if="!attachments.length" class="text-xs text-muted-foreground">Chưa có chứng từ nào</p>
+          <ul v-else class="space-y-1.5">
+            <li v-for="a in attachments" :key="a.id" class="flex items-center justify-between text-sm p-2 rounded-lg border border-border">
+              <span class="truncate">📎 {{ a.file_name }}<span class="text-xs text-muted-foreground ml-2">{{ fileSize(a.file_size) }}</span></span>
+              <button class="text-xs text-primary hover:underline shrink-0 ml-2" @click="downloadAttachment(a)">Tải về</button>
+            </li>
+          </ul>
+        </div>
+
         <div class="border-t border-border pt-4">
           <p class="text-sm font-semibold text-foreground mb-3">Quy trình phê duyệt</p>
           <ApprovalTimeline :steps="approvalSteps" />
@@ -390,12 +408,65 @@ const closeCreateModal = () => {
 const viewDetail = async (request) => {
   selectedRequest.value = request;
   showDetailModal.value = true;
+  attachments.value = [];
   try {
     const response = await requestService.get(request.id);
     const detail = response?.data || response;
     if (detail) selectedRequest.value = detail;
   } catch (err) {
     console.error('Error loading request detail:', err);
+  }
+  await loadAttachments(request.id);
+};
+
+// ── Chứng từ đính kèm ──
+const attachments = ref([]);
+const uploadingAttachment = ref(false);
+
+const fileSize = (bytes) => {
+  const n = Number(bytes) || 0;
+  return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+};
+
+const loadAttachments = async (requestId) => {
+  try {
+    const res = await requestService.getAttachments(requestId);
+    attachments.value = Array.isArray(res) ? res : (res?.data || []);
+  } catch (err) {
+    attachments.value = [];
+  }
+};
+
+const uploadAttachment = async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file || !selectedRequest.value) return;
+  if (file.size > 10 * 1024 * 1024) {
+    alert('Tệp tối đa 10MB');
+    return;
+  }
+  try {
+    uploadingAttachment.value = true;
+    await requestService.uploadAttachment(selectedRequest.value.id, file);
+    await loadAttachments(selectedRequest.value.id);
+  } catch (err) {
+    alert(err.response?.data?.message || 'Không tải lên được tệp');
+  } finally {
+    uploadingAttachment.value = false;
+  }
+};
+
+const downloadAttachment = async (a) => {
+  try {
+    const blob = await requestService.downloadAttachment(selectedRequest.value.id, a.id);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = a.file_name;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Không tải được tệp');
   }
 };
 

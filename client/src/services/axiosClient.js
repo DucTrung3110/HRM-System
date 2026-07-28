@@ -18,6 +18,11 @@ axiosClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Upload tệp: phải để axios tự đặt multipart/form-data KÈM boundary. Giữ
+    // Content-Type mặc định application/json sẽ làm server không đọc được tệp (422).
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
     return config;
   },
   (error) => {

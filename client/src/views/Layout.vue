@@ -726,6 +726,7 @@ const navGroupsData = shallowRef([
       { path: '/onboarding', name: 'onboarding', label: 'Hội nhập & Nghỉ việc', icon: IconUser, adminOnly: true },
       { path: '/departments', name: 'departments', label: 'Phòng ban', icon: IconBuilding, adminOnly: true },
       { path: '/profile-change-requests', name: 'profile-change-requests', label: 'Đơn đổi thông tin', icon: IconFileText, adminOnly: true },
+      { path: '/personnel-decisions', name: 'personnel-decisions', label: 'Quyết định nhân sự', icon: IconShieldCheck, adminOnly: true },
     ]
   },
   {
