@@ -483,7 +483,7 @@ class AnalyticsController extends Controller
 
         $supported = ['headcount', 'leave-summary', 'payroll-summary', 'attendance-summary',
             'bhxh-declaration', 'pit-finalization',
-            'workforce-structure', 'leave-liability', 'labor-cost'];
+            'workforce-structure', 'leave-liability', 'labor-cost', 'hr-metrics'];
         if (! is_string($type) || ! in_array($type, $supported, true)) {
             return $this->validationError([
                 'type' => ['Unknown report type. Supported: '.implode(', ', $supported)],
@@ -510,6 +510,7 @@ class AnalyticsController extends Controller
             'workforce-structure' => $this->workforceStructureRows(),
             'leave-liability' => $this->leaveLiabilityRows(),
             'labor-cost' => $this->laborCostRows($filters),
+            'hr-metrics' => $this->hrMetricsRows($filters),
         };
 
         $authEmployeeId = $request->attributes->get('auth_employee_id');
@@ -725,6 +726,144 @@ class AnalyticsController extends Controller
                 $push('Loại hợp đồng', $r->b, (int) $r->c);
             }
         }
+
+        return $rows;
+    }
+
+    /**
+     * BẢNG CHỈ SỐ NHÂN SỰ (HR scorecard) — các TỶ LỆ để ban giám đốc đọc, khác với
+     * dashboard chỉ ĐẾM số lượng. Mỗi dòng: nhóm · chỉ số · giá trị · đơn vị · diễn giải.
+     * Kỳ mặc định = tháng hiện tại; truyền filters.from / filters.to để đổi.
+     *
+     * ponytail: mỗi chỉ số 1 truy vấn nhỏ, dễ đọc/sửa từng cái; gộp thành 1 query
+     * khổng lồ chỉ đáng làm nếu bảng chỉ số này bị gọi liên tục.
+     */
+    private function hrMetricsRows(array $filters): Collection
+    {
+        $tenantId = TenantContext::hasTenant() ? TenantContext::id() : null;
+        $from = ! empty($filters['from']) ? Carbon::parse($filters['from']) : Carbon::now()->startOfMonth();
+        $to = ! empty($filters['to']) ? Carbon::parse($filters['to']) : Carbon::now()->endOfMonth();
+        $fromS = $from->toDateString();
+        $toS = $to->toDateString();
+        $year = (int) $to->format('Y');
+
+        $rows = collect();
+        $add = function (string $nhom, string $chiSo, $giaTri, string $donVi, string $dienGiai = '') use (&$rows) {
+            $rows->push([
+                'nhom' => $nhom, 'chi_so' => $chiSo,
+                'gia_tri' => is_float($giaTri) ? round($giaTri, 1) : $giaTri,
+                'don_vi' => $donVi, 'dien_giai' => $dienGiai,
+            ]);
+        };
+        $pct = fn ($a, $b) => $b > 0 ? round($a * 100 / $b, 1) : 0.0;
+
+        $emp = fn () => DB::table('employees AS e')
+            ->when($tenantId !== null, fn ($q) => $q->where('e.tenant_id', $tenantId))
+            ->whereIn('e.status', ['ACTIVE', 'PROBATION']);
+
+        // ── 1. Nhân lực ──
+        $total = (int) $emp()->count();
+        $add('Nhân lực', 'Tổng lao động đang làm việc', $total, 'người', "Kỳ {$fromS} → {$toS}");
+        if ($total === 0) {
+            return $rows;
+        }
+        $avgSeniority = (float) ($emp()->whereNotNull('e.hire_date')
+            ->selectRaw('AVG(EXTRACT(YEAR FROM AGE(e.hire_date))) v')->value('v') ?? 0);
+        $add('Nhân lực', 'Thâm niên bình quân', $avgSeniority, 'năm', 'Càng cao càng ổn định');
+        $female = (int) $emp()->where('e.gender', 'FEMALE')->count();
+        $add('Nhân lực', 'Tỷ lệ lao động nữ', $pct($female, $total), '%', "{$female}/{$total} — số liệu cho báo cáo Sở LĐ-TB&XH");
+        $probation = (int) $emp()->where('e.status', 'PROBATION')->count();
+        $add('Nhân lực', 'Tỷ lệ đang thử việc', $pct($probation, $total), '%', "{$probation} người");
+        $newHire = (int) $emp()->whereBetween('e.hire_date', [$fromS, $toS])->count();
+        $add('Nhân lực', 'Tuyển mới trong kỳ', $newHire, 'người', '');
+
+        // ── 2. Chấm công (chỉ số kỷ luật lao động) ──
+        if (Schema::hasTable('attendances')) {
+            $att = fn () => DB::table('attendances AS a')
+                ->when($tenantId !== null, fn ($q) => $q->where('a.tenant_id', $tenantId))
+                ->whereBetween('a.work_date', [$fromS, $toS]);
+            $totalAtt = (int) $att()->count();
+            if ($totalAtt > 0) {
+                $late = (int) $att()->where('a.status', 'LATE')->count();
+                $absent = (int) $att()->where('a.status', 'ABSENT')->count();
+                $early = (int) $att()->where('a.status', 'EARLY_LEAVE')->count();
+                $add('Chấm công', 'Tỷ lệ đi muộn', $pct($late, $totalAtt), '%', "{$late}/{$totalAtt} lượt công");
+                $add('Chấm công', 'Tỷ lệ vắng không phép', $pct($absent, $totalAtt), '%', 'Chuẩn quản trị: nên dưới 3%');
+                $add('Chấm công', 'Tỷ lệ về sớm', $pct($early, $totalAtt), '%', "{$early} lượt");
+                $add('Chấm công', 'Ngày công bình quân', $totalAtt / max(1, $total), 'ngày/người', 'Trong kỳ báo cáo');
+            }
+        }
+
+        // ── 3. Tăng ca (rủi ro pháp lý Đ.107) ──
+        if (Schema::hasTable('overtime_requests')) {
+            $otBase = fn () => DB::table('overtime_requests AS o')
+                ->when($tenantId !== null, fn ($q) => $q->where('o.tenant_id', $tenantId))
+                ->whereIn('o.status', ['APPROVED', 'ĐÃ_DUYỆT']);
+            $otHours = (float) $otBase()->whereBetween('o.work_date', [$fromS, $toS])->sum('o.total_hours');
+            $otPeople = (int) $otBase()->whereBetween('o.work_date', [$fromS, $toS])->distinct()->count('o.employee_id');
+            $add('Tăng ca', 'Tổng giờ tăng ca trong kỳ', $otHours, 'giờ', "{$otPeople} người có tăng ca");
+            $add('Tăng ca', 'Giờ tăng ca bình quân', $otPeople > 0 ? $otHours / $otPeople : 0.0, 'giờ/người', 'Tính trên người CÓ tăng ca');
+
+            // Cảnh báo trần OT năm (Đ.107 BLLĐ, config overtime.yearly_max_hours).
+            $yMax = (float) \App\Support\HrmConfig::get('overtime.yearly_max_hours', 200);
+            // select tường minh: group theo employee_id mà để SELECT * sẽ lỗi 42803 (Postgres).
+            $nearCap = (int) $otBase()->whereRaw('EXTRACT(YEAR FROM o.work_date) = ?', [$year])
+                ->select('o.employee_id')
+                ->groupBy('o.employee_id')
+                ->havingRaw('SUM(o.total_hours) >= ?', [$yMax * 0.8])
+                ->get()->count();
+            $add('Tăng ca', 'Số người chạm ngưỡng 80% trần OT năm', $nearCap, 'người',
+                "Trần {$yMax}h/năm — vượt là vi phạm Điều 107 BLLĐ");
+        }
+
+        // ── 4. Phép năm ──
+        if (Schema::hasTable('leave_balances')) {
+            $lb = DB::table('leave_balances AS lb')
+                ->join('employees AS e', 'e.id', '=', 'lb.employee_id')
+                ->when($tenantId !== null, fn ($q) => $q->where('lb.tenant_id', $tenantId))
+                ->where('lb.year', (string) $year)
+                ->whereIn('e.status', ['ACTIVE', 'PROBATION'])
+                ->selectRaw('COALESCE(SUM(lb.total_days),0) t, COALESCE(SUM(lb.used_days),0) u, COALESCE(SUM(lb.remaining_days),0) r')
+                ->first();
+            if ($lb && (float) $lb->t > 0) {
+                $add('Phép năm', 'Tỷ lệ sử dụng phép', $pct((float) $lb->u, (float) $lb->t), '%',
+                    'Thấp quá → dồn phép cuối năm, tăng chi phí phải trả');
+                $add('Phép năm', 'Ngày phép còn lại bình quân', (float) $lb->r / max(1, $total), 'ngày/người', '');
+            }
+        }
+
+        // ── 5. Tuân thủ ──
+        if (Schema::hasTable('contracts')) {
+            $withContract = (int) DB::table('contracts AS c')
+                ->join('employees AS e', 'e.id', '=', 'c.employee_id')
+                ->when($tenantId !== null, fn ($q) => $q->where('c.tenant_id', $tenantId))
+                ->whereIn('c.status', ['ACTIVE', 'CÓ_HIỆU_LỰC', 'ĐANG_HIỆU_LỰC'])
+                ->whereIn('e.status', ['ACTIVE', 'PROBATION'])
+                ->distinct()->count('e.id');
+            $add('Tuân thủ', 'Tỷ lệ có hợp đồng hiệu lực', $pct($withContract, $total), '%',
+                $withContract < $total ? 'CẢNH BÁO: '.($total - $withContract).' người chưa có HĐ hiệu lực' : 'Đạt 100%');
+
+            $expiring = (int) DB::table('contracts')
+                ->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))
+                ->whereIn('status', ['ACTIVE', 'CÓ_HIỆU_LỰC', 'ĐANG_HIỆU_LỰC'])
+                ->whereBetween('end_date', [Carbon::today()->toDateString(), Carbon::today()->addDays(30)->toDateString()])
+                ->count();
+            $add('Tuân thủ', 'Hợp đồng hết hạn trong 30 ngày', $expiring, 'hợp đồng', 'Cần chuẩn bị gia hạn/ký mới');
+        }
+        if (Schema::hasTable('certificates')) {
+            $certTotal = (int) DB::table('certificates')->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))->count();
+            $certValid = (int) DB::table('certificates')->when($tenantId !== null, fn ($q) => $q->where('tenant_id', $tenantId))
+                ->where(fn ($q) => $q->whereNull('expiry_date')->orWhere('expiry_date', '>=', Carbon::today()->toDateString()))
+                ->count();
+            if ($certTotal > 0) {
+                $add('Tuân thủ', 'Tỷ lệ chứng chỉ còn hiệu lực', $pct($certValid, $certTotal), '%',
+                    'Gồm chứng chỉ an toàn lao động (NĐ 44/2016)');
+            }
+        }
+
+        // ── 6. Chỉ số CHƯA tính được (nói thẳng thay vì bỏ trống) ──
+        $add('Chưa đo được', 'Tỷ lệ nghỉ việc (turnover)', 'N/A', '%',
+            'Cần bổ sung ngày chấm dứt + lý do nghỉ vào luồng nghỉ việc');
 
         return $rows;
     }

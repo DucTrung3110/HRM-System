@@ -259,6 +259,7 @@ const loading = ref(true);
 // --- Server-side report engine (primary mode) ---
 const mode = ref('server');
 const serverReportTypes = [
+  { value: 'hr-metrics', label: '★ Bảng chỉ số nhân sự (tỷ lệ đi muộn, vắng, phép, tuân thủ)' },
   { value: 'headcount', label: 'Thống kê nhân sự theo phòng ban' },
   { value: 'workforce-structure', label: 'Cơ cấu lao động (giới tính / tuổi / thâm niên / trình độ / HĐ)' },
   { value: 'leave-summary', label: 'Tổng hợp nghỉ phép' },
